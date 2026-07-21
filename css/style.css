@@ -41,6 +41,11 @@
   box-sizing: border-box;
 }
 
+/* The `hidden` attribute must always win, even over classes that set their own `display`. */
+[hidden] {
+  display: none !important;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -717,6 +722,39 @@ body {
 .stat-tile__value {
   font-size: 1.5rem;
   font-weight: 600;
+}
+
+.chart-mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.chart-mode-toggle__btn {
+  appearance: none;
+  border: none;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.chart-mode-toggle__btn + .chart-mode-toggle__btn {
+  border-left: 1px solid var(--color-border);
+}
+
+.chart-mode-toggle__btn.is-active {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+#hourly-date-field {
+  margin: 4px 0 16px;
+  max-width: 220px;
 }
 
 .chart-wrap {

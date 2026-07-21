@@ -11,10 +11,14 @@
   const productRankingContainer = document.getElementById('report-product-ranking');
   const customerRankingContainer = document.getElementById('report-customer-ranking');
   const reportsPanel = document.querySelector('[data-view-panel="reports"]');
+  const chartModeButtons = document.querySelectorAll('.chart-mode-toggle__btn');
+  const hourlyDateField = document.getElementById('hourly-date-field');
+  const hourlyDateInput = document.getElementById('report-hourly-date');
 
   let allSalesCache = [];
   let lastDailyPoints = null;
   let initialized = false;
+  let chartMode = 'daily';
 
   function pad2(n) {
     return String(n).padStart(2, '0');
@@ -140,7 +144,7 @@
       `L${x + w - r},${yTop} Q${x + w},${yTop} ${x + w},${yTop + r} L${x + w},${yBase} Z`;
   }
 
-  function renderColumnChart(container, points) {
+  function renderColumnChart(container, points, chartLabel = '売上推移グラフ') {
     const width = Math.max(280, Math.round(container.clientWidth || 320));
     const height = 220;
     const marginLeft = 52;
@@ -186,7 +190,7 @@
     });
 
     container.innerHTML = `
-      <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="日別売上推移グラフ">
+      <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="${window.App.escapeHtml(chartLabel)}">
         ${gridSvg}
         <line x1="${marginLeft}" y1="${baselineY}" x2="${width - marginRight}" y2="${baselineY}" class="chart-baseline" />
         ${barsSvg}
@@ -210,7 +214,43 @@
     }
     const points = buildSeries(filtered, chartFrom, chartTo);
     lastDailyPoints = points;
-    renderColumnChart(dailyChartContainer, points);
+    renderColumnChart(dailyChartContainer, points, '日別売上推移グラフ');
+  }
+
+  // ---------- Hourly trend chart (for a single selected day) ----------
+
+  function buildHourlySeries(dayStr) {
+    const daySales = allSalesCache.filter((s) => s.date === dayStr);
+    const amountByHour = new Array(24).fill(0);
+    for (const s of daySales) {
+      const hour = new Date(s.createdAt).getHours();
+      amountByHour[hour] += Number(s.totalAmount) || 0;
+    }
+    return amountByHour.map((amount, hour) => ({ key: String(hour), label: `${hour}時`, amount }));
+  }
+
+  function renderHourlyChart() {
+    if (!hourlyDateInput.value) {
+      hourlyDateInput.value = toISODate(new Date());
+    }
+    const dayStr = hourlyDateInput.value;
+    const points = buildHourlySeries(dayStr);
+
+    if (!points.some((p) => p.amount > 0)) {
+      dailyChartContainer.innerHTML = `<p class="empty-state">${window.App.escapeHtml(dayStr)} の売上データがありません。</p>`;
+      lastDailyPoints = null;
+      return;
+    }
+    lastDailyPoints = points;
+    renderColumnChart(dailyChartContainer, points, '時間帯別売上推移グラフ');
+  }
+
+  function renderChart(filtered, from, to) {
+    if (chartMode === 'hourly') {
+      renderHourlyChart();
+    } else {
+      renderDailyChart(filtered, from, to);
+    }
   }
 
   // ---------- Rankings (product / customer) ----------
@@ -274,7 +314,7 @@
 
     const filtered = filterByRange(allSalesCache, from, to);
     renderStatTiles(filtered);
-    renderDailyChart(filtered, from, to);
+    renderChart(filtered, from, to);
     renderRanking(productRankingContainer, aggregateProducts(filtered));
     renderRanking(customerRankingContainer, aggregateCustomers(filtered));
   }
@@ -289,6 +329,20 @@
     render();
   });
 
+  chartModeButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (chartMode === btn.dataset.chartMode) return;
+      chartMode = btn.dataset.chartMode;
+      chartModeButtons.forEach((b) => b.classList.toggle('is-active', b === btn));
+      hourlyDateField.hidden = chartMode !== 'hourly';
+      render();
+    });
+  });
+
+  hourlyDateInput.addEventListener('change', () => {
+    if (chartMode === 'hourly') render();
+  });
+
   function debounce(fn, wait) {
     let timer;
     return (...args) => {
@@ -299,7 +353,8 @@
 
   window.addEventListener('resize', debounce(() => {
     if (reportsPanel && !reportsPanel.hidden && lastDailyPoints) {
-      renderColumnChart(dailyChartContainer, lastDailyPoints);
+      const label = chartMode === 'hourly' ? '時間帯別売上推移グラフ' : '日別売上推移グラフ';
+      renderColumnChart(dailyChartContainer, lastDailyPoints, label);
     }
   }, 200));
 
@@ -307,6 +362,7 @@
     allSalesCache = await window.SalesDB.getAll();
     if (!initialized) {
       presetSelect.value = 'this-month';
+      hourlyDateInput.value = toISODate(new Date());
       initialized = true;
     }
     render();

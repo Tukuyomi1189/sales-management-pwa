@@ -167,7 +167,17 @@
   </section>
 
   <section class="panel">
-    <h2 class="panel__title">日別売上推移</h2>
+    <div class="panel__header">
+      <h2 class="panel__title">売上推移</h2>
+      <div class="chart-mode-toggle" role="group" aria-label="表示切り替え">
+        <button type="button" class="chart-mode-toggle__btn is-active" data-chart-mode="daily">日別</button>
+        <button type="button" class="chart-mode-toggle__btn" data-chart-mode="hourly">時間帯別</button>
+      </div>
+    </div>
+    <div class="field" id="hourly-date-field" hidden>
+      <label for="report-hourly-date">対象日</label>
+      <input type="date" id="report-hourly-date" />
+    </div>
     <div id="report-daily-chart" class="chart-wrap"></div>
   </section>
 
