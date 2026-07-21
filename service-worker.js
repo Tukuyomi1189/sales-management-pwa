@@ -1,13 +1,21 @@
 /* Service worker: caches the app shell so the app works fully offline. */
 
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 const CACHE_NAME = `sales-management-shell-${CACHE_VERSION}`;
+
+// The Firebase SDK (loaded from this CDN by js/firebase-init.js) isn't
+// precached by URL here — the modular build pulls in extra sub-chunk URLs we
+// don't know ahead of time — but requests to it are allowed through the
+// runtime cache-first logic below, so it becomes available offline after
+// the first successful online load.
+const RUNTIME_CACHE_ORIGINS = ['https://www.gstatic.com'];
 
 const PRECACHE_URLS = [
   './',
   './index.html',
   './manifest.json',
   './css/style.css',
+  './js/firebase-init.js',
   './js/db.js',
   './js/router.js',
   './js/products.js',
@@ -49,8 +57,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // Only handle same-origin GET requests; let everything else pass through.
-  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) {
+  const requestOrigin = new URL(request.url).origin;
+  const isCacheableOrigin = requestOrigin === self.location.origin || RUNTIME_CACHE_ORIGINS.includes(requestOrigin);
+
+  // Only handle GET requests to same-origin or explicitly allow-listed origins; let everything else pass through.
+  if (request.method !== 'GET' || !isCacheableOrigin) {
     return;
   }
 

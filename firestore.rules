@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// Access model: no per-user accounts. Any signed-in client (anonymous auth,
+// see js/firebase-init.js) that knows a workspace's shared code can read/write
+// that workspace's data. The workspace code itself is the access control —
+// treat it like a shared password, not a public identifier.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /workspaces/{workspaceId}/sales/{saleId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

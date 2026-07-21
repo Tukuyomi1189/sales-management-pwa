@@ -150,109 +150,169 @@ function calcTotal(items) {
   return items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unitPrice), 0);
 }
 
-/** Apply `sign` * quantity to each item's product stock (sign = -1 on sale, +1 on revert). */
-async function adjustStock(productsStore, items, sign) {
-  for (const item of items) {
-    if (!item.productId) continue;
-    const product = await requestToPromise(productsStore.get(item.productId));
-    if (!product) continue;
-    const nextStock = (Number(product.stock) || 0) + sign * Number(item.quantity);
-    await requestToPromise(
-      productsStore.put({ ...product, stock: nextStock, updatedAt: new Date().toISOString() })
-    );
-  }
-}
-
 function localDateString(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * Apply `sign` * quantity to each item's product stock (sign = -1 on sale, +1 on revert).
+ * Runs against the local IndexedDB product store via ProductDB — Firestore (where sales
+ * live now, see below) can't share a transaction with IndexedDB, so this is a best-effort
+ * follow-up write rather than an atomic part of the sale write.
+ */
+async function adjustStockLocally(items, sign) {
+  for (const item of items) {
+    if (!item.productId) continue;
+    const product = await ProductDB.get(item.productId);
+    if (!product) continue;
+    const nextStock = (Number(product.stock) || 0) + sign * Number(item.quantity);
+    await ProductDB.update(item.productId, { stock: nextStock });
+  }
+}
+
+/**
+ * Sales (cloud-synced pilot): stored in Firestore under
+ * workspaces/{workspaceId}/sales so multiple devices sharing the same
+ * workspace code see the same data in real time. Product/customer master
+ * data is unaffected — it still lives only in local IndexedDB.
+ *
+ * IDs are Firestore document ID strings (not the auto-increment numbers
+ * IndexedDB used), and the registration moment (local time) is always used
+ * as a sale's date/time — there is no manual date field in the sales entry UI.
+ */
+async function salesCollection() {
+  const { firestore, fs } = await window.Cloud.ready;
+  return fs.collection(firestore, 'workspaces', window.Cloud.getWorkspaceId(), 'sales');
+}
+
+function sortSales(all) {
+  return all.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
+}
+
 const SalesDB = {
-  /**
-   * The registration moment (Date.now, in local time) is always used as the
-   * sale's date/time — there is no manual date field in the sales entry UI.
-   */
-  add(sale) {
-    return withStores([STORE_SALES, STORE_PRODUCTS], 'readwrite', async (stores) => {
-      const now = new Date();
-      const nowIso = now.toISOString();
-      const record = {
-        ...sale,
-        date: localDateString(now),
-        totalAmount: calcTotal(sale.items),
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      };
-      const id = await requestToPromise(stores[STORE_SALES].add(record));
-      await adjustStock(stores[STORE_PRODUCTS], sale.items, -1);
-      return id;
-    });
+  async add(sale) {
+    const { fs } = await window.Cloud.ready;
+    const col = await salesCollection();
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const record = {
+      ...sale,
+      date: localDateString(now),
+      totalAmount: calcTotal(sale.items),
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    const docRef = await fs.addDoc(col, record);
+    await adjustStockLocally(sale.items, -1);
+    return docRef.id;
   },
 
   /** Editing a sale never changes its original date/time — only the line items, customer, or note. */
-  update(id, changes) {
-    return withStores([STORE_SALES, STORE_PRODUCTS], 'readwrite', async (stores) => {
-      const existing = await requestToPromise(stores[STORE_SALES].get(id));
-      if (!existing) throw new Error(`Sale with id ${id} not found`);
+  async update(id, changes) {
+    const { fs } = await window.Cloud.ready;
+    const col = await salesCollection();
+    const docRef = fs.doc(col, id);
+    const snap = await fs.getDoc(docRef);
+    if (!snap.exists()) throw new Error(`Sale with id ${id} not found`);
+    const existing = snap.data();
 
-      // Revert stock impact of the old line items before applying the new ones.
-      await adjustStock(stores[STORE_PRODUCTS], existing.items, +1);
+    // Revert stock impact of the old line items before applying the new ones.
+    await adjustStockLocally(existing.items, +1);
 
-      const { date, createdAt, ...safeChanges } = changes;
-      const updated = {
-        ...existing,
-        ...safeChanges,
-        id,
-        totalAmount: calcTotal(safeChanges.items || existing.items),
-        updatedAt: new Date().toISOString(),
-      };
-      await requestToPromise(stores[STORE_SALES].put(updated));
-      await adjustStock(stores[STORE_PRODUCTS], updated.items, -1);
-      return updated;
-    });
+    const { date, createdAt, id: _id, ...safeChanges } = changes;
+    const updated = {
+      ...safeChanges,
+      totalAmount: calcTotal(safeChanges.items || existing.items),
+      updatedAt: new Date().toISOString(),
+    };
+    await fs.updateDoc(docRef, updated);
+    await adjustStockLocally(updated.items || existing.items, -1);
+    return { ...existing, ...updated, id };
   },
 
-  remove(id) {
-    return withStores([STORE_SALES, STORE_PRODUCTS], 'readwrite', async (stores) => {
-      const existing = await requestToPromise(stores[STORE_SALES].get(id));
-      if (!existing) return;
-      await adjustStock(stores[STORE_PRODUCTS], existing.items, +1);
-      await requestToPromise(stores[STORE_SALES].delete(id));
-    });
+  async remove(id) {
+    const { fs } = await window.Cloud.ready;
+    const col = await salesCollection();
+    const docRef = fs.doc(col, id);
+    const snap = await fs.getDoc(docRef);
+    if (snap.exists()) {
+      await adjustStockLocally(snap.data().items, +1);
+    }
+    await fs.deleteDoc(docRef);
   },
 
-  get(id) {
-    return withStore(STORE_SALES, 'readonly', (store) => requestToPromise(store.get(id)));
+  async get(id) {
+    const { fs } = await window.Cloud.ready;
+    const col = await salesCollection();
+    const snap = await fs.getDoc(fs.doc(col, id));
+    return snap.exists() ? { id: snap.id, ...snap.data() } : undefined;
   },
 
+  /** One-time fetch (works offline against the local Firestore cache too). */
   async getAll() {
-    const all = await withStore(STORE_SALES, 'readonly', (store) => requestToPromise(store.getAll()));
-    return all.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const { fs } = await window.Cloud.ready;
+    const col = await salesCollection();
+    const snap = await fs.getDocs(col);
+    return sortSales(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   },
 
   /**
-   * Restore previously-exported sales as-is (keeps their original date/createdAt/updatedAt).
-   * Unlike add()/update(), this does NOT touch product stock — a bulk historical import
-   * would otherwise double-count stock that a paired product export already reflects.
+   * Real-time subscription: `callback` fires immediately with the current data,
+   * then again whenever this workspace's sales change — from this device or
+   * any other one sharing the same workspace code. Returns an unsubscribe fn.
+   */
+  subscribe(callback) {
+    let unsubscribe = null;
+    let cancelled = false;
+    salesCollection().then((col) => {
+      if (cancelled) return;
+      window.Cloud.ready.then(({ fs }) => {
+        if (cancelled) return;
+        unsubscribe = fs.onSnapshot(col, (snap) => {
+          callback(sortSales(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+        }, (err) => console.error('SalesDB.subscribe error:', err));
+      });
+    });
+    return () => {
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
+    };
+  },
+
+  /**
+   * Restore previously-exported (or locally-migrated) sales as-is, keeping their
+   * original date/createdAt/updatedAt. Unlike add()/update(), this does NOT touch
+   * product stock — a bulk historical import would otherwise double-count stock
+   * that a paired product export/local state already reflects.
    */
   async bulkImport(sales) {
-    return withStore(STORE_SALES, 'readwrite', async (store) => {
-      const now = new Date().toISOString();
-      for (const s of sales) {
-        const { id, ...rest } = s;
-        const createdAt = rest.createdAt || now;
-        await requestToPromise(store.add({
-          ...rest,
-          date: rest.date || localDateString(new Date(createdAt)),
-          totalAmount: calcTotal(rest.items || []),
-          createdAt,
-          updatedAt: rest.updatedAt || createdAt,
-        }));
-      }
-    });
+    const { fs } = await window.Cloud.ready;
+    const col = await salesCollection();
+    const now = new Date().toISOString();
+    for (const s of sales) {
+      const { id, ...rest } = s;
+      const createdAt = rest.createdAt || now;
+      await fs.addDoc(col, {
+        ...rest,
+        date: rest.date || localDateString(new Date(createdAt)),
+        totalAmount: calcTotal(rest.items || []),
+        createdAt,
+        updatedAt: rest.updatedAt || createdAt,
+      });
+    }
+  },
+};
+
+/** Read-only access to the old local IndexedDB sales store, kept only so its
+ * data can be migrated into the cloud-synced SalesDB above (see the
+ * "ローカルの売上データをアップロード" button in the sales view). */
+const LegacyLocalSalesDB = {
+  async getAll() {
+    return withStore(STORE_SALES, 'readonly', (store) => requestToPromise(store.getAll()));
   },
 };
 
 window.ProductDB = ProductDB;
 window.CustomerDB = CustomerDB;
 window.SalesDB = SalesDB;
+window.LegacyLocalSalesDB = LegacyLocalSalesDB;

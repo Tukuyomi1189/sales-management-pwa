@@ -30,12 +30,19 @@
   const exportButton = document.getElementById('sale-export-button');
   const importInput = document.getElementById('sale-import-input');
 
+  const workspaceCodeDisplay = document.getElementById('workspace-code-display');
+  const workspaceCodeCopyButton = document.getElementById('workspace-code-copy');
+  const workspaceCodeJoinButton = document.getElementById('workspace-code-join');
+  const workspaceMigrateButton = document.getElementById('workspace-migrate-button');
+  const workspaceMessage = document.getElementById('workspace-message');
+
   let allSales = [];
   let productsCache = [];
   let customersCache = [];
   let items = [];
   let editingId = null;
   let selectedIds = new Set();
+  let unsubscribeSales = null;
 
   // ---------- Form: header fields ----------
 
@@ -309,7 +316,6 @@
       resetForm();
       await refreshProductsCache();
       renderProductGrid();
-      await refreshList();
       window.ProductsView?.refreshList();
     } catch (err) {
       console.error(err);
@@ -329,7 +335,6 @@
       selectedIds.delete(id);
       await refreshProductsCache();
       renderProductGrid();
-      await refreshList();
       window.ProductsView?.refreshList();
     } catch (err) {
       console.error(err);
@@ -406,7 +411,7 @@
 
   tableBody.addEventListener('change', (event) => {
     if (!event.target.classList.contains('sale-row-checkbox')) return;
-    const id = Number(event.target.dataset.id);
+    const id = event.target.dataset.id;
     if (event.target.checked) {
       selectedIds.add(id);
     } else {
@@ -442,7 +447,6 @@
       selectedIds.clear();
       await refreshProductsCache();
       renderProductGrid();
-      await refreshList();
       window.ProductsView?.refreshList();
     } catch (err) {
       console.error(err);
@@ -464,14 +468,9 @@
     summaryStats.textContent = text;
   }
 
-  async function refreshList() {
-    try {
-      allSales = await window.SalesDB.getAll();
-    } catch (err) {
-      console.error(err);
-      window.App.showToast('データの読み込みに失敗しました。', true);
-      allSales = [];
-    }
+  /** Shared render step, driven by the live Firestore subscription (see activate()). */
+  function applySales(sales) {
+    allSales = sales;
     const existingIds = new Set(allSales.map((s) => s.id));
     selectedIds = new Set([...selectedIds].filter((id) => existingIds.has(id)));
 
@@ -480,10 +479,20 @@
     updateSummary(visible);
   }
 
+  /** One-time manual resync fallback (the subscription is the primary update path). */
+  async function refreshList() {
+    try {
+      applySales(await window.SalesDB.getAll());
+    } catch (err) {
+      console.error(err);
+      window.App.showToast('データの読み込みに失敗しました。', true);
+    }
+  }
+
   tableBody.addEventListener('click', (event) => {
     const btn = event.target.closest('button[data-action]');
     if (!btn) return;
-    const id = Number(btn.dataset.id);
+    const id = btn.dataset.id;
     const sale = allSales.find((s) => s.id === id);
     if (!sale) return;
 
@@ -554,7 +563,6 @@
 
       await window.SalesDB.bulkImport(cleaned);
       window.App.showToast(`${cleaned.length}件の売上をインポートしました(在庫数は変更されません)。`);
-      await refreshList();
     } catch (err) {
       console.error(err);
       window.App.showToast('インポートに失敗しました: ' + err.message, true);
@@ -568,11 +576,69 @@
     importInput.value = '';
   });
 
+  // ---------- Workspace code (cloud sync) ----------
+
+  function showWorkspaceMessage(message, isError = false) {
+    workspaceMessage.textContent = message;
+    workspaceMessage.classList.toggle('is-error', isError);
+  }
+
+  function renderWorkspaceCode() {
+    workspaceCodeDisplay.textContent = window.Cloud.getWorkspaceId();
+  }
+
+  workspaceCodeCopyButton.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(window.Cloud.getWorkspaceId());
+      showWorkspaceMessage('共有コードをコピーしました。');
+    } catch (err) {
+      console.error(err);
+      showWorkspaceMessage('コピーに失敗しました。手動で選択してコピーしてください。', true);
+    }
+  });
+
+  workspaceCodeJoinButton.addEventListener('click', () => {
+    const input = window.prompt('参加する共有コードを入力してください(他の端末に表示されているコード):', '');
+    if (input == null) return;
+    const clean = input.trim();
+    if (!clean) return;
+    window.Cloud.setWorkspaceId(clean);
+    showWorkspaceMessage('共有コードを変更しました。反映のためページを再読み込みします…');
+    setTimeout(() => location.reload(), 800);
+  });
+
+  workspaceMigrateButton.addEventListener('click', async () => {
+    const ok = window.confirm(
+      'この端末にローカル保存されている過去の売上データを、現在の共有コードのクラウドにアップロードします。' +
+      '在庫数は変更されません。同じデータを2回アップロードすると重複するのでご注意ください。続けますか?'
+    );
+    if (!ok) return;
+
+    workspaceMigrateButton.disabled = true;
+    try {
+      const localSales = await window.LegacyLocalSalesDB.getAll();
+      if (localSales.length === 0) {
+        showWorkspaceMessage('アップロード対象のローカル売上データはありませんでした。');
+        return;
+      }
+      await window.SalesDB.bulkImport(localSales);
+      showWorkspaceMessage(`${localSales.length}件のローカル売上データをアップロードしました。`);
+    } catch (err) {
+      console.error(err);
+      showWorkspaceMessage('アップロードに失敗しました: ' + err.message, true);
+    } finally {
+      workspaceMigrateButton.disabled = false;
+    }
+  });
+
   async function activate() {
     await Promise.all([refreshProductsCache(), refreshCustomerOptions()]);
     renderLineItems();
     renderProductGrid();
-    await refreshList();
+    renderWorkspaceCode();
+    if (!unsubscribeSales) {
+      unsubscribeSales = window.SalesDB.subscribe(applySales);
+    }
   }
 
   window.SalesView = { refreshList, refreshCustomerOptions, refreshProductsCache };

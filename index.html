@@ -40,7 +40,20 @@
 
 <!-- ============ 売上入力 ============ -->
 <section class="view" data-view-panel="sales" hidden>
-  <p class="tagline">売上を記録すると、明細の商品在庫が自動的に減算されます。データはこの端末内(IndexedDB)に保存され、オフラインでも利用できます。</p>
+  <p class="tagline">売上を記録すると、明細の商品在庫が自動的に減算されます。売上データはオンライン時に共有コード単位でリアルタイム同期され、オフラインでも引き続き利用できます。</p>
+
+  <section class="panel">
+    <h2 class="panel__title">共有コード(売上のリアルタイム同期)</h2>
+    <p class="tagline">同じ共有コードを入力した端末同士で、売上データがリアルタイムに共有されます。共有コードはパスワードのように扱ってください。商品・顧客マスタはまだ端末ごとのローカルデータです。</p>
+    <div class="workspace-code-bar">
+      <span class="workspace-code-bar__label">共有コード:</span>
+      <strong id="workspace-code-display">------</strong>
+      <button type="button" id="workspace-code-copy" class="btn btn--ghost btn--sm">コピー</button>
+      <button type="button" id="workspace-code-join" class="btn btn--ghost btn--sm">別のコードに参加</button>
+      <button type="button" id="workspace-migrate-button" class="btn btn--ghost btn--sm">ローカルの売上データをアップロード</button>
+    </div>
+    <p class="form-message" id="workspace-message" role="status" aria-live="polite"></p>
+  </section>
 
   <section class="panel" aria-labelledby="sale-form-heading">
     <h2 id="sale-form-heading" class="panel__title">
@@ -388,11 +401,12 @@
 </main>
 
 <footer class="app-footer">
-  <p>すべてのデータは端末内のみに保存されます(外部サーバーへの送信はありません)。</p>
+  <p>商品・顧客データは端末内のみに保存されます。売上データは共有コードでのリアルタイム同期のためFirebase(Google Cloud)に保存されます。</p>
 </footer>
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
+<script src="js/firebase-init.js"></script>
 <script src="js/db.js"></script>
 <script src="js/router.js"></script>
 <script src="js/products.js"></script>

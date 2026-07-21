@@ -417,6 +417,29 @@ body {
   text-align: right;
 }
 
+.workspace-code-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.workspace-code-bar__label {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+#workspace-code-display {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+
 .checkbox-col {
   width: 36px;
   text-align: center;
