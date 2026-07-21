@@ -256,6 +256,7 @@
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (submitButton.disabled) return; // guard against double-tap/double-click firing this twice
     clearFormError();
 
     const validItems = items.filter((i) => i.productId && Number(i.quantity) > 0);
@@ -290,6 +291,7 @@
       items: preparedItems,
     };
 
+    submitButton.disabled = true;
     try {
       if (editingId) {
         await window.SalesDB.update(editingId, payload);
@@ -306,6 +308,8 @@
     } catch (err) {
       console.error(err);
       showFormError('保存に失敗しました: ' + err.message);
+    } finally {
+      submitButton.disabled = false;
     }
   }
 

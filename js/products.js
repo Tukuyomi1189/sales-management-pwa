@@ -84,6 +84,8 @@
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (submitButton.disabled) return; // guard against double-tap/double-click firing this twice
+
     const values = readFormValues();
     const error = validate(values);
     if (error) {
@@ -92,6 +94,7 @@
       return;
     }
 
+    submitButton.disabled = true;
     try {
       if (editingId) {
         await window.ProductDB.update(editingId, values);
@@ -106,6 +109,8 @@
       console.error(err);
       formMessage.textContent = '保存に失敗しました: ' + err.message;
       formMessage.classList.add('is-error');
+    } finally {
+      submitButton.disabled = false;
     }
   }
 
