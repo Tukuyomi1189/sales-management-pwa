@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#2f6fed" />
+<meta name="description" content="オフラインで動作する売上管理ツール(商品マスタ管理)" />
+<title>売上管理ツール - 商品マスタ管理</title>
+
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/favicon-64.png" type="image/png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<header class="app-header">
+  <div class="app-header__title">
+    <img src="icons/icon-192.png" alt="" class="app-header__logo" />
+    <h1>売上管理ツール</h1>
+  </div>
+  <div class="app-header__actions">
+    <span id="connection-status" class="status-pill status-pill--online" role="status">
+      <span class="status-pill__dot"></span>
+      <span id="connection-status-text">オンライン</span>
+    </span>
+    <button id="install-button" class="btn btn--ghost" type="button" hidden>
+      アプリをインストール
+    </button>
+  </div>
+</header>
+
+<main class="container">
+  <p class="tagline">商品マスタ管理(MVP) — データはこの端末内(IndexedDB)に保存され、オフラインでも利用できます。</p>
+
+  <section class="panel" aria-labelledby="form-heading">
+    <h2 id="form-heading" class="panel__title">
+      <span id="form-mode-label">商品を登録</span>
+    </h2>
+    <form id="product-form" class="product-form" novalidate>
+      <input type="hidden" id="product-id" />
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="field-code">商品コード</label>
+          <input type="text" id="field-code" name="code" placeholder="例: P-0001" autocomplete="off" />
+        </div>
+
+        <div class="field field--required">
+          <label for="field-name">商品名 <span class="req">必須</span></label>
+          <input type="text" id="field-name" name="name" placeholder="例: 段ボール箱 Mサイズ" required autocomplete="off" />
+        </div>
+
+        <div class="field">
+          <label for="field-category">カテゴリ</label>
+          <input type="text" id="field-category" name="category" placeholder="例: 資材" autocomplete="off" />
+        </div>
+
+        <div class="field field--required">
+          <label for="field-price">単価(円) <span class="req">必須</span></label>
+          <input type="number" id="field-price" name="price" min="0" step="1" inputmode="numeric" required />
+        </div>
+
+        <div class="field field--required">
+          <label for="field-stock">在庫数 <span class="req">必須</span></label>
+          <input type="number" id="field-stock" name="stock" min="0" step="1" inputmode="numeric" required />
+        </div>
+
+        <div class="field">
+          <label for="field-unit">単位</label>
+          <input type="text" id="field-unit" name="unit" placeholder="例: 個" autocomplete="off" />
+        </div>
+
+        <div class="field field--wide">
+          <label for="field-note">メモ</label>
+          <input type="text" id="field-note" name="note" placeholder="任意メモ" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" id="submit-button" class="btn btn--primary">登録する</button>
+        <button type="button" id="cancel-edit-button" class="btn btn--ghost" hidden>編集をキャンセル</button>
+        <span id="form-message" class="form-message" role="alert" aria-live="polite"></span>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel" aria-labelledby="list-heading">
+    <div class="panel__header">
+      <h2 id="list-heading" class="panel__title">商品一覧</h2>
+      <div class="summary" id="summary-stats" aria-live="polite"></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="field field--search">
+        <label for="search-input" class="sr-only">検索</label>
+        <input type="search" id="search-input" placeholder="商品名・商品コード・カテゴリで検索" autocomplete="off" />
+      </div>
+      <div class="toolbar__actions">
+        <button id="export-button" class="btn btn--ghost" type="button">JSONエクスポート</button>
+        <label class="btn btn--ghost btn--file">
+          JSONインポート
+          <input type="file" id="import-input" accept="application/json" hidden />
+        </label>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="product-table" class="product-table">
+        <thead>
+          <tr>
+            <th scope="col">商品コード</th>
+            <th scope="col">商品名</th>
+            <th scope="col">カテゴリ</th>
+            <th scope="col" class="num">単価</th>
+            <th scope="col" class="num">在庫数</th>
+            <th scope="col">単位</th>
+            <th scope="col">更新日時</th>
+            <th scope="col" class="actions-col">操作</th>
+          </tr>
+        </thead>
+        <tbody id="product-table-body">
+        </tbody>
+      </table>
+      <p id="empty-state" class="empty-state" hidden>登録されている商品がありません。上のフォームから登録してください。</p>
+    </div>
+  </section>
+</main>
+
+<footer class="app-footer">
+  <p>すべてのデータは端末内のみに保存されます(外部サーバーへの送信はありません)。</p>
+</footer>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="js/db.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
