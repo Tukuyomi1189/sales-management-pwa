@@ -1,13 +1,15 @@
 /* Service worker: caches the app shell so the app works fully offline. */
 
-const CACHE_VERSION = 'v9';
+const CACHE_VERSION = 'v10';
 const CACHE_NAME = `sales-management-shell-${CACHE_VERSION}`;
 
-// The Firebase SDK (loaded from this CDN by js/firebase-init.js) isn't
-// precached by URL here — the modular build pulls in extra sub-chunk URLs we
-// don't know ahead of time — but requests to it are allowed through the
-// runtime cache-first logic below, so it becomes available offline after
-// the first successful online load.
+// Must match the SDK_VERSION constant in js/firebase-init.js. Each of these 3
+// files is a self-contained bundle that only imports firebase-app.js
+// internally (checked directly against the CDN) — no further sub-chunk URLs
+// to track, so precaching exactly these makes the SDK available offline
+// starting from the very first successful load, not just the second one.
+const FIREBASE_SDK_VERSION = '12.16.0';
+const FIREBASE_SDK_BASE = `https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}`;
 const RUNTIME_CACHE_ORIGINS = ['https://www.gstatic.com'];
 
 const PRECACHE_URLS = [
@@ -16,6 +18,9 @@ const PRECACHE_URLS = [
   './manifest.json',
   './css/style.css',
   './js/firebase-init.js',
+  `${FIREBASE_SDK_BASE}/firebase-app.js`,
+  `${FIREBASE_SDK_BASE}/firebase-auth.js`,
+  `${FIREBASE_SDK_BASE}/firebase-firestore.js`,
   './js/db.js',
   './js/router.js',
   './js/products.js',
