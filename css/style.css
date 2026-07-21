@@ -417,6 +417,23 @@ body {
   text-align: right;
 }
 
+.checkbox-col {
+  width: 36px;
+  text-align: center;
+}
+
+.checkbox-col input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.selection-count {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 .row-actions {
   display: flex;
   gap: 8px;

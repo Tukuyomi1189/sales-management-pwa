@@ -24,12 +24,16 @@
   const tableBody = document.getElementById('sale-table-body');
   const emptyState = document.getElementById('sale-empty-state');
   const summaryStats = document.getElementById('sale-summary-stats');
+  const selectAllCheckbox = document.getElementById('sale-select-all');
+  const bulkDeleteButton = document.getElementById('sale-bulk-delete-button');
+  const selectionCountEl = document.getElementById('sale-selection-count');
 
   let allSales = [];
   let productsCache = [];
   let customersCache = [];
   let items = [];
   let editingId = null;
+  let selectedIds = new Set();
 
   // ---------- Form: header fields ----------
 
@@ -320,6 +324,7 @@
       await window.SalesDB.remove(id);
       window.App.showToast('売上を削除し、在庫を戻しました。');
       if (editingId === id) resetForm();
+      selectedIds.delete(id);
       await refreshProductsCache();
       renderProductGrid();
       await refreshList();
@@ -354,6 +359,9 @@
     for (const s of sales) {
       const tr = document.createElement('tr');
       tr.innerHTML = `
+        <td class="checkbox-col">
+          <input type="checkbox" class="sale-row-checkbox" data-id="${s.id}" aria-label="この売上を選択" ${selectedIds.has(s.id) ? 'checked' : ''} />
+        </td>
         <td>${window.App.formatDateTime(s.createdAt)}</td>
         <td>${window.App.escapeHtml(s.customerName) || '一般客'}</td>
         <td class="name-cell">${window.App.escapeHtml(itemsSummaryText(s))}</td>
@@ -369,7 +377,81 @@
       fragment.appendChild(tr);
     }
     tableBody.appendChild(fragment);
+    updateSelectionUI(sales);
   }
+
+  // ---------- Bulk selection / delete ----------
+
+  function updateSelectionUI(visibleSales) {
+    const visibleIds = visibleSales.map((s) => s.id);
+    const selectedVisibleCount = visibleIds.filter((id) => selectedIds.has(id)).length;
+
+    selectionCountEl.textContent = selectedIds.size > 0 ? `${selectedIds.size}件選択中` : '';
+    bulkDeleteButton.disabled = selectedIds.size === 0;
+
+    if (visibleIds.length === 0) {
+      selectAllCheckbox.checked = false;
+      selectAllCheckbox.indeterminate = false;
+    } else {
+      selectAllCheckbox.checked = selectedVisibleCount === visibleIds.length;
+      selectAllCheckbox.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
+    }
+  }
+
+  function currentVisibleSales() {
+    return filterSales(allSales, searchInput.value);
+  }
+
+  tableBody.addEventListener('change', (event) => {
+    if (!event.target.classList.contains('sale-row-checkbox')) return;
+    const id = Number(event.target.dataset.id);
+    if (event.target.checked) {
+      selectedIds.add(id);
+    } else {
+      selectedIds.delete(id);
+    }
+    updateSelectionUI(currentVisibleSales());
+  });
+
+  selectAllCheckbox.addEventListener('change', () => {
+    const visible = currentVisibleSales();
+    if (selectAllCheckbox.checked) {
+      visible.forEach((s) => selectedIds.add(s.id));
+    } else {
+      visible.forEach((s) => selectedIds.delete(s.id));
+    }
+    renderTable(visible);
+  });
+
+  async function handleBulkDelete() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+
+    const ok = window.confirm(`選択した${ids.length}件の売上を削除します。明細分の在庫はそれぞれ元に戻ります。よろしいですか?`);
+    if (!ok) return;
+
+    bulkDeleteButton.disabled = true;
+    try {
+      for (const id of ids) {
+        await window.SalesDB.remove(id);
+      }
+      window.App.showToast(`${ids.length}件の売上を削除し、在庫を戻しました。`);
+      if (editingId && ids.includes(editingId)) resetForm();
+      selectedIds.clear();
+      await refreshProductsCache();
+      renderProductGrid();
+      await refreshList();
+      window.ProductsView?.refreshList();
+    } catch (err) {
+      console.error(err);
+      window.App.showToast('一括削除に失敗しました: ' + err.message, true);
+      await refreshList();
+    } finally {
+      bulkDeleteButton.disabled = selectedIds.size === 0;
+    }
+  }
+
+  bulkDeleteButton.addEventListener('click', handleBulkDelete);
 
   function updateSummary(visibleSales) {
     const totalCount = allSales.length;
@@ -388,6 +470,9 @@
       window.App.showToast('データの読み込みに失敗しました。', true);
       allSales = [];
     }
+    const existingIds = new Set(allSales.map((s) => s.id));
+    selectedIds = new Set([...selectedIds].filter((id) => existingIds.has(id)));
+
     const visible = filterSales(allSales, searchInput.value);
     renderTable(visible);
     updateSummary(visible);

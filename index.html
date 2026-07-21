@@ -113,11 +113,16 @@
         <label for="sale-search-input" class="sr-only">検索</label>
         <input type="search" id="sale-search-input" placeholder="顧客名・商品名・メモで検索" autocomplete="off" />
       </div>
+      <div class="toolbar__actions">
+        <span id="sale-selection-count" class="selection-count"></span>
+        <button id="sale-bulk-delete-button" class="btn btn--danger" type="button" disabled>選択した売上を削除</button>
+      </div>
     </div>
     <div class="table-wrap">
       <table class="product-table">
         <thead>
           <tr>
+            <th scope="col" class="checkbox-col"><input type="checkbox" id="sale-select-all" aria-label="表示中の売上をすべて選択" /></th>
             <th scope="col">売上日時</th>
             <th scope="col">顧客</th>
             <th scope="col">明細</th>
