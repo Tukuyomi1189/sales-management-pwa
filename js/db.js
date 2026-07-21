@@ -229,6 +229,28 @@ const SalesDB = {
     const all = await withStore(STORE_SALES, 'readonly', (store) => requestToPromise(store.getAll()));
     return all.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
   },
+
+  /**
+   * Restore previously-exported sales as-is (keeps their original date/createdAt/updatedAt).
+   * Unlike add()/update(), this does NOT touch product stock — a bulk historical import
+   * would otherwise double-count stock that a paired product export already reflects.
+   */
+  async bulkImport(sales) {
+    return withStore(STORE_SALES, 'readwrite', async (store) => {
+      const now = new Date().toISOString();
+      for (const s of sales) {
+        const { id, ...rest } = s;
+        const createdAt = rest.createdAt || now;
+        await requestToPromise(store.add({
+          ...rest,
+          date: rest.date || localDateString(new Date(createdAt)),
+          totalAmount: calcTotal(rest.items || []),
+          createdAt,
+          updatedAt: rest.updatedAt || createdAt,
+        }));
+      }
+    });
+  },
 };
 
 window.ProductDB = ProductDB;

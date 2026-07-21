@@ -116,6 +116,11 @@
       <div class="toolbar__actions">
         <span id="sale-selection-count" class="selection-count"></span>
         <button id="sale-bulk-delete-button" class="btn btn--danger" type="button" disabled>選択した売上を削除</button>
+        <button id="sale-export-button" class="btn btn--ghost" type="button">JSONエクスポート</button>
+        <label class="btn btn--ghost btn--file">
+          JSONインポート
+          <input type="file" id="sale-import-input" accept="application/json" hidden />
+        </label>
       </div>
     </div>
     <div class="table-wrap">
@@ -351,6 +356,13 @@
       <div class="field field--search">
         <label for="customer-search-input" class="sr-only">検索</label>
         <input type="search" id="customer-search-input" placeholder="顧客名・担当者名で検索" autocomplete="off" />
+      </div>
+      <div class="toolbar__actions">
+        <button id="customer-export-button" class="btn btn--ghost" type="button">JSONエクスポート</button>
+        <label class="btn btn--ghost btn--file">
+          JSONインポート
+          <input type="file" id="customer-import-input" accept="application/json" hidden />
+        </label>
       </div>
     </div>
     <div class="table-wrap">

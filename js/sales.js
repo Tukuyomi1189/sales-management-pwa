@@ -27,6 +27,8 @@
   const selectAllCheckbox = document.getElementById('sale-select-all');
   const bulkDeleteButton = document.getElementById('sale-bulk-delete-button');
   const selectionCountEl = document.getElementById('sale-selection-count');
+  const exportButton = document.getElementById('sale-export-button');
+  const importInput = document.getElementById('sale-import-input');
 
   let allSales = [];
   let productsCache = [];
@@ -500,6 +502,71 @@
 
   form.addEventListener('submit', handleSubmit);
   cancelEditButton.addEventListener('click', resetForm);
+
+  // ---------- Import / Export ----------
+
+  function exportJSON() {
+    if (allSales.length === 0) {
+      window.App.showToast('エクスポートするデータがありません。', true);
+      return;
+    }
+    const blob = new Blob([JSON.stringify(allSales, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    a.href = url;
+    a.download = `sales-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    window.App.showToast('JSONファイルをエクスポートしました。');
+  }
+
+  async function importJSON(file) {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!Array.isArray(data)) throw new Error('JSONの形式が不正です(配列である必要があります)。');
+
+      const cleaned = data
+        .filter((item) => item && typeof item === 'object' && Array.isArray(item.items) && item.items.length > 0)
+        .map((item) => ({
+          date: typeof item.date === 'string' ? item.date : '',
+          customerId: item.customerId != null ? Number(item.customerId) : null,
+          customerName: item.customerName || '',
+          note: item.note || '',
+          items: item.items
+            .filter((i) => i && i.productName)
+            .map((i) => ({
+              productId: i.productId != null ? Number(i.productId) : null,
+              productName: String(i.productName),
+              unit: i.unit || '',
+              unitPrice: Number(i.unitPrice) || 0,
+              quantity: Number(i.quantity) || 0,
+            })),
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        }))
+        .filter((item) => item.items.length > 0);
+
+      if (cleaned.length === 0) throw new Error('インポート可能な売上データが見つかりませんでした。');
+
+      await window.SalesDB.bulkImport(cleaned);
+      window.App.showToast(`${cleaned.length}件の売上をインポートしました(在庫数は変更されません)。`);
+      await refreshList();
+    } catch (err) {
+      console.error(err);
+      window.App.showToast('インポートに失敗しました: ' + err.message, true);
+    }
+  }
+
+  exportButton.addEventListener('click', exportJSON);
+  importInput.addEventListener('change', () => {
+    const file = importInput.files && importInput.files[0];
+    if (file) importJSON(file);
+    importInput.value = '';
+  });
 
   async function activate() {
     await Promise.all([refreshProductsCache(), refreshCustomerOptions()]);

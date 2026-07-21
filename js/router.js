@@ -41,11 +41,15 @@
 
   NAV_BUTTONS.forEach((btn) => {
     btn.addEventListener('click', () => {
-      if (currentView() === btn.dataset.view) {
-        render();
-      } else {
+      // Update the hash for back/forward + deep-linking, but don't rely solely on the
+      // 'hashchange' event to reflect it — rapid clicks across tabs can update
+      // location.hash faster than the browser dispatches/coalesces that event, which
+      // left the UI showing a stale view. Rendering synchronously here is idempotent
+      // (hashchange firing afterward just re-renders the same, already-current view).
+      if (currentView() !== btn.dataset.view) {
         location.hash = btn.dataset.view;
       }
+      render();
     });
   });
 

@@ -22,6 +22,9 @@
   const emptyState = document.getElementById('customer-empty-state');
   const summaryStats = document.getElementById('customer-summary-stats');
 
+  const exportButton = document.getElementById('customer-export-button');
+  const importInput = document.getElementById('customer-import-input');
+
   let allCustomers = [];
   let editingId = null;
 
@@ -198,6 +201,61 @@
 
   form.addEventListener('submit', handleSubmit);
   cancelEditButton.addEventListener('click', resetForm);
+
+  function exportJSON() {
+    if (allCustomers.length === 0) {
+      window.App.showToast('エクスポートするデータがありません。', true);
+      return;
+    }
+    const blob = new Blob([JSON.stringify(allCustomers, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    a.href = url;
+    a.download = `customers-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    window.App.showToast('JSONファイルをエクスポートしました。');
+  }
+
+  async function importJSON(file) {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!Array.isArray(data)) throw new Error('JSONの形式が不正です(配列である必要があります)。');
+
+      const cleaned = data
+        .filter((item) => item && typeof item === 'object' && item.name)
+        .map((item) => ({
+          name: String(item.name),
+          contactName: item.contactName || '',
+          phone: item.phone || '',
+          email: item.email || '',
+          address: item.address || '',
+          note: item.note || '',
+          createdAt: item.createdAt,
+        }));
+
+      if (cleaned.length === 0) throw new Error('インポート可能な顧客データが見つかりませんでした。');
+
+      await window.CustomerDB.bulkAdd(cleaned);
+      window.App.showToast(`${cleaned.length}件の顧客をインポートしました。`);
+      await refreshList();
+      window.SalesView?.refreshCustomerOptions();
+    } catch (err) {
+      console.error(err);
+      window.App.showToast('インポートに失敗しました: ' + err.message, true);
+    }
+  }
+
+  exportButton.addEventListener('click', exportJSON);
+  importInput.addEventListener('change', () => {
+    const file = importInput.files && importInput.files[0];
+    if (file) importJSON(file);
+    importInput.value = '';
+  });
 
   window.CustomersView = { refreshList };
   window.Router.onViewActivate('customers', refreshList);
