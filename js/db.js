@@ -163,15 +163,25 @@ async function adjustStock(productsStore, items, sign) {
   }
 }
 
+function localDateString(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const SalesDB = {
+  /**
+   * The registration moment (Date.now, in local time) is always used as the
+   * sale's date/time — there is no manual date field in the sales entry UI.
+   */
   add(sale) {
     return withStores([STORE_SALES, STORE_PRODUCTS], 'readwrite', async (stores) => {
-      const now = new Date().toISOString();
+      const now = new Date();
+      const nowIso = now.toISOString();
       const record = {
         ...sale,
+        date: localDateString(now),
         totalAmount: calcTotal(sale.items),
-        createdAt: now,
-        updatedAt: now,
+        createdAt: nowIso,
+        updatedAt: nowIso,
       };
       const id = await requestToPromise(stores[STORE_SALES].add(record));
       await adjustStock(stores[STORE_PRODUCTS], sale.items, -1);
@@ -179,6 +189,7 @@ const SalesDB = {
     });
   },
 
+  /** Editing a sale never changes its original date/time — only the line items, customer, or note. */
   update(id, changes) {
     return withStores([STORE_SALES, STORE_PRODUCTS], 'readwrite', async (stores) => {
       const existing = await requestToPromise(stores[STORE_SALES].get(id));
@@ -187,11 +198,12 @@ const SalesDB = {
       // Revert stock impact of the old line items before applying the new ones.
       await adjustStock(stores[STORE_PRODUCTS], existing.items, +1);
 
+      const { date, createdAt, ...safeChanges } = changes;
       const updated = {
         ...existing,
-        ...changes,
+        ...safeChanges,
         id,
-        totalAmount: calcTotal(changes.items || existing.items),
+        totalAmount: calcTotal(safeChanges.items || existing.items),
         updatedAt: new Date().toISOString(),
       };
       await requestToPromise(stores[STORE_SALES].put(updated));

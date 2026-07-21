@@ -1,11 +1,10 @@
-/* Sales entry view: line-item form (auto stock deduction via SalesDB), list, search. */
+/* Sales entry view: tap-to-add product grid + qty stepper (auto stock deduction via SalesDB), list, search. */
 
 (() => {
   'use strict';
 
   const form = document.getElementById('sale-form');
   const idField = document.getElementById('sale-id');
-  const dateField = document.getElementById('sale-field-date');
   const customerField = document.getElementById('sale-field-customer');
   const noteField = document.getElementById('sale-field-note');
 
@@ -14,7 +13,9 @@
   const cancelEditButton = document.getElementById('sale-cancel-edit-button');
   const formMessage = document.getElementById('sale-form-message');
 
-  const addLineItemButton = document.getElementById('add-line-item-button');
+  const productSearchInput = document.getElementById('sale-product-search');
+  const productGrid = document.getElementById('sale-product-grid');
+
   const lineItemsBody = document.getElementById('line-items-body');
   const lineItemsEmpty = document.getElementById('line-items-empty');
   const totalDisplay = document.getElementById('sale-total-display');
@@ -30,19 +31,12 @@
   let items = [];
   let editingId = null;
 
-  function todayISO() {
-    const d = new Date();
-    const tzOffsetMs = d.getTimezoneOffset() * 60000;
-    return new Date(d.getTime() - tzOffsetMs).toISOString().slice(0, 10);
-  }
-
   // ---------- Form: header fields ----------
 
   function resetForm() {
     form.reset();
     idField.value = '';
     editingId = null;
-    dateField.value = todayISO();
     items = [];
     formModeLabel.textContent = '売上を登録';
     submitButton.textContent = '登録する';
@@ -50,6 +44,7 @@
     formMessage.textContent = '';
     formMessage.classList.remove('is-error');
     renderLineItems();
+    renderProductGrid();
   }
 
   function showFormError(message) {
@@ -76,18 +71,69 @@
     productsCache = await window.ProductDB.getAll();
   }
 
-  // ---------- Line items ----------
+  // ---------- Product picker (tap-to-add grid) ----------
 
-  function productOptionsHtml(selectedId) {
-    const options = productsCache.map((p) => {
-      const selected = String(p.id) === String(selectedId) ? 'selected' : '';
-      return `<option value="${p.id}" ${selected}>${window.App.escapeHtml(p.name)} (${window.App.formatCurrency(p.price)})</option>`;
-    });
-    return '<option value="">商品を選択</option>' + options.join('');
+  function filterProductsForPicker(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return productsCache;
+    return productsCache.filter((p) => (
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.code || '').toLowerCase().includes(q) ||
+      (p.category || '').toLowerCase().includes(q)
+    ));
   }
 
+  function renderProductGrid() {
+    const filtered = filterProductsForPicker(productSearchInput.value);
+
+    if (productsCache.length === 0) {
+      productGrid.innerHTML = '<p class="empty-state">商品マスタに商品が登録されていません。先に商品マスタで登録してください。</p>';
+      return;
+    }
+    if (filtered.length === 0) {
+      productGrid.innerHTML = '<p class="empty-state">該当する商品がありません。</p>';
+      return;
+    }
+
+    productGrid.innerHTML = filtered.map((p) => {
+      const cartItem = items.find((i) => i.productId === p.id);
+      const low = Number(p.stock) <= 5;
+      return `
+        <button type="button" class="product-tile ${cartItem ? 'is-in-cart' : ''}" data-product-id="${p.id}">
+          ${cartItem ? `<span class="product-tile__cart-badge">${cartItem.quantity}</span>` : ''}
+          <span class="product-tile__name">${window.App.escapeHtml(p.name)}</span>
+          <span class="product-tile__price">${window.App.formatCurrency(p.price)}</span>
+          <span class="product-tile__stock ${low ? 'stock-hint--low' : ''}">在庫: ${window.App.escapeHtml(p.stock)}${window.App.escapeHtml(p.unit) || ''}</span>
+        </button>
+      `;
+    }).join('');
+  }
+
+  function addProductToCart(productId) {
+    const product = productsCache.find((p) => p.id === productId);
+    if (!product) return;
+    const existing = items.find((i) => i.productId === productId);
+    if (existing) {
+      existing.quantity = Number(existing.quantity || 0) + 1;
+    } else {
+      items.push({ productId, unitPrice: Number(product.price) || 0, quantity: 1 });
+    }
+    renderLineItems();
+    renderProductGrid();
+  }
+
+  productGrid.addEventListener('click', (event) => {
+    const tile = event.target.closest('.product-tile');
+    if (!tile) return;
+    addProductToCart(Number(tile.dataset.productId));
+  });
+
+  productSearchInput.addEventListener('input', renderProductGrid);
+
+  // ---------- Line items (cart) ----------
+
   function stockHintFor(productId) {
-    const product = productsCache.find((p) => p.id === Number(productId));
+    const product = productsCache.find((p) => p.id === productId);
     if (!product) return '';
     const low = Number(product.stock) <= 5;
     return `<div class="stock-hint ${low ? 'stock-hint--low' : ''}">現在庫: ${window.App.escapeHtml(product.stock)}${window.App.escapeHtml(product.unit) || ''}</div>`;
@@ -103,17 +149,22 @@
 
     const fragment = document.createDocumentFragment();
     items.forEach((item, idx) => {
+      const product = productsCache.find((p) => p.id === item.productId);
       const tr = document.createElement('tr');
       tr.dataset.rowIndex = String(idx);
       tr.innerHTML = `
-        <td>
-          <select class="line-item-product" data-index="${idx}">
-            ${productOptionsHtml(item.productId)}
-          </select>
+        <td class="name-cell">
+          ${window.App.escapeHtml(product ? product.name : '(削除された商品)')}
           ${stockHintFor(item.productId)}
         </td>
         <td class="num"><input type="number" class="line-input line-item-price" data-index="${idx}" min="0" step="1" value="${item.unitPrice}" /></td>
-        <td class="num"><input type="number" class="line-input line-item-qty" data-index="${idx}" min="1" step="1" value="${item.quantity}" /></td>
+        <td class="num">
+          <div class="qty-stepper">
+            <button type="button" class="qty-stepper__btn" data-action="dec" data-index="${idx}" aria-label="数量を減らす">－</button>
+            <input type="number" class="qty-stepper__input line-item-qty" data-index="${idx}" min="1" step="1" value="${item.quantity}" />
+            <button type="button" class="qty-stepper__btn" data-action="inc" data-index="${idx}" aria-label="数量を増やす">＋</button>
+          </div>
+        </td>
         <td class="num line-item-subtotal">${window.App.formatCurrency(rowSubtotal(item))}</td>
         <td class="actions-col">
           <button type="button" class="btn btn--danger btn--sm" data-action="remove-line" data-index="${idx}">削除</button>
@@ -136,11 +187,6 @@
     totalDisplay.textContent = window.App.formatCurrency(total);
   }
 
-  addLineItemButton.addEventListener('click', () => {
-    items.push({ productId: '', unitPrice: 0, quantity: 1 });
-    renderLineItems();
-  });
-
   lineItemsBody.addEventListener('input', (event) => {
     const idx = Number(event.target.dataset.index);
     if (Number.isNaN(idx)) return;
@@ -149,28 +195,37 @@
       updateRowSubtotal(idx);
       updateTotalDisplay();
     } else if (event.target.classList.contains('line-item-qty')) {
-      items[idx].quantity = Number(event.target.value) || 0;
+      const next = Math.max(1, Number(event.target.value) || 1);
+      items[idx].quantity = next;
       updateRowSubtotal(idx);
       updateTotalDisplay();
+      renderProductGrid();
     }
   });
 
-  lineItemsBody.addEventListener('change', (event) => {
-    if (!event.target.classList.contains('line-item-product')) return;
-    const idx = Number(event.target.dataset.index);
-    const productId = event.target.value ? Number(event.target.value) : '';
-    items[idx].productId = productId;
-    const product = productsCache.find((p) => p.id === productId);
-    if (product) items[idx].unitPrice = Number(product.price) || 0;
-    renderLineItems();
-  });
-
   lineItemsBody.addEventListener('click', (event) => {
-    const btn = event.target.closest('button[data-action="remove-line"]');
+    const btn = event.target.closest('button[data-action]');
     if (!btn) return;
     const idx = Number(btn.dataset.index);
-    items.splice(idx, 1);
-    renderLineItems();
+
+    if (btn.dataset.action === 'remove-line') {
+      items.splice(idx, 1);
+      renderLineItems();
+      renderProductGrid();
+    } else if (btn.dataset.action === 'inc') {
+      items[idx].quantity = Number(items[idx].quantity || 0) + 1;
+      renderLineItems();
+      renderProductGrid();
+    } else if (btn.dataset.action === 'dec') {
+      const next = Number(items[idx].quantity || 0) - 1;
+      if (next <= 0) {
+        items.splice(idx, 1);
+      } else {
+        items[idx].quantity = next;
+      }
+      renderLineItems();
+      renderProductGrid();
+    }
   });
 
   // ---------- Submit / edit / delete ----------
@@ -178,16 +233,16 @@
   function startEdit(sale) {
     editingId = sale.id;
     idField.value = String(sale.id);
-    dateField.value = sale.date || todayISO();
     customerField.value = sale.customerId ? String(sale.customerId) : '';
     noteField.value = sale.note || '';
     items = sale.items.map((i) => ({ productId: i.productId || '', unitPrice: i.unitPrice, quantity: i.quantity }));
 
-    formModeLabel.textContent = `売上を編集中: ${window.App.formatDateTime(sale.date)}`;
+    formModeLabel.textContent = `売上を編集中: ${window.App.formatDateTime(sale.createdAt)}`;
     submitButton.textContent = '更新する';
     cancelEditButton.hidden = false;
     clearFormError();
     renderLineItems();
+    renderProductGrid();
 
     form.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -203,13 +258,9 @@
     event.preventDefault();
     clearFormError();
 
-    if (!dateField.value) {
-      showFormError('日付を入力してください。');
-      return;
-    }
     const validItems = items.filter((i) => i.productId && Number(i.quantity) > 0);
     if (validItems.length === 0) {
-      showFormError('明細を1件以上、商品と数量を指定して追加してください。');
+      showFormError('商品一覧からタップして、明細を1件以上追加してください。');
       return;
     }
 
@@ -233,7 +284,6 @@
     });
 
     const payload = {
-      date: dateField.value,
       customerId,
       customerName: customer ? customer.name : '',
       note: noteField.value.trim(),
@@ -250,6 +300,7 @@
       }
       resetForm();
       await refreshProductsCache();
+      renderProductGrid();
       await refreshList();
       window.ProductsView?.refreshList();
     } catch (err) {
@@ -258,14 +309,15 @@
     }
   }
 
-  async function handleDelete(id, dateLabel) {
-    const ok = window.confirm(`${dateLabel} の売上を削除します。明細分の在庫は元に戻ります。よろしいですか?`);
+  async function handleDelete(id, label) {
+    const ok = window.confirm(`${label} の売上を削除します。明細分の在庫は元に戻ります。よろしいですか?`);
     if (!ok) return;
     try {
       await window.SalesDB.remove(id);
       window.App.showToast('売上を削除し、在庫を戻しました。');
       if (editingId === id) resetForm();
       await refreshProductsCache();
+      renderProductGrid();
       await refreshList();
       window.ProductsView?.refreshList();
     } catch (err) {
@@ -298,7 +350,7 @@
     for (const s of sales) {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${window.App.escapeHtml(s.date)}</td>
+        <td>${window.App.formatDateTime(s.createdAt)}</td>
         <td>${window.App.escapeHtml(s.customerName) || '一般客'}</td>
         <td class="name-cell">${window.App.escapeHtml(itemsSummaryText(s))}</td>
         <td class="num">${window.App.formatCurrency(s.totalAmount)}</td>
@@ -347,7 +399,7 @@
     if (btn.dataset.action === 'edit') {
       startEdit(sale);
     } else if (btn.dataset.action === 'delete') {
-      handleDelete(id, sale.date);
+      handleDelete(id, window.App.formatDateTime(sale.createdAt));
     }
   });
 
@@ -361,15 +413,12 @@
   cancelEditButton.addEventListener('click', resetForm);
 
   async function activate() {
-    dateField.value = dateField.value || todayISO();
     await Promise.all([refreshProductsCache(), refreshCustomerOptions()]);
     renderLineItems();
+    renderProductGrid();
     await refreshList();
   }
 
   window.SalesView = { refreshList, refreshCustomerOptions, refreshProductsCache };
   window.Router.onViewActivate('sales', activate);
-
-  // Initialize default date immediately so the field isn't blank before first activation.
-  dateField.value = todayISO();
 })();

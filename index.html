@@ -50,10 +50,6 @@
       <input type="hidden" id="sale-id" />
 
       <div class="form-grid">
-        <div class="field field--required">
-          <label for="sale-field-date">日付 <span class="req">必須</span></label>
-          <input type="date" id="sale-field-date" required />
-        </div>
         <div class="field">
           <label for="sale-field-customer">顧客</label>
           <select id="sale-field-customer">
@@ -66,10 +62,20 @@
         </div>
       </div>
 
+      <div class="product-picker">
+        <div class="product-picker__header">
+          <h3>商品を選ぶ(タップで追加)</h3>
+          <div class="field field--search">
+            <label for="sale-product-search" class="sr-only">商品検索</label>
+            <input type="search" id="sale-product-search" placeholder="商品名・商品コードで検索" autocomplete="off" />
+          </div>
+        </div>
+        <div id="sale-product-grid" class="product-grid"></div>
+      </div>
+
       <div class="line-items">
         <div class="line-items__header">
           <h3>明細</h3>
-          <button type="button" id="add-line-item-button" class="btn btn--ghost btn--sm">＋ 明細を追加</button>
         </div>
         <div class="table-wrap">
           <table class="product-table line-items-table">
@@ -84,7 +90,7 @@
             </thead>
             <tbody id="line-items-body"></tbody>
           </table>
-          <p id="line-items-empty" class="empty-state">「＋ 明細を追加」から商品を追加してください。</p>
+          <p id="line-items-empty" class="empty-state">上の商品一覧からタップして追加してください。</p>
         </div>
         <div class="line-items__total">合計金額: <strong id="sale-total-display">¥0</strong></div>
       </div>
@@ -112,7 +118,7 @@
       <table class="product-table">
         <thead>
           <tr>
-            <th scope="col">日付</th>
+            <th scope="col">売上日時</th>
             <th scope="col">顧客</th>
             <th scope="col">明細</th>
             <th scope="col" class="num">合計金額</th>

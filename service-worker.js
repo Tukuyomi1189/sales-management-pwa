@@ -1,6 +1,6 @@
 /* Service worker: caches the app shell so the app works fully offline. */
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `sales-management-shell-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
