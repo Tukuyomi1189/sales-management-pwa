@@ -170,15 +170,15 @@
           ${window.App.escapeHtml(product ? product.name : '(削除された商品)')}
           ${stockHintFor(item.productId)}
         </td>
-        <td class="num"><input type="number" class="line-input line-item-price" data-index="${idx}" min="0" step="1" value="${item.unitPrice}" /></td>
-        <td class="num">
+        <td class="num" data-label="単価"><input type="number" class="line-input line-item-price" data-index="${idx}" min="0" step="1" value="${item.unitPrice}" /></td>
+        <td class="num" data-label="数量">
           <div class="qty-stepper">
             <button type="button" class="qty-stepper__btn" data-action="dec" data-index="${idx}" aria-label="数量を減らす">－</button>
             <input type="number" class="qty-stepper__input line-item-qty" data-index="${idx}" min="1" step="1" value="${item.quantity}" />
             <button type="button" class="qty-stepper__btn" data-action="inc" data-index="${idx}" aria-label="数量を増やす">＋</button>
           </div>
         </td>
-        <td class="num line-item-subtotal">${window.App.formatCurrency(rowSubtotal(item))}</td>
+        <td class="num line-item-subtotal" data-label="小計">${window.App.formatCurrency(rowSubtotal(item))}</td>
         <td class="actions-col">
           <button type="button" class="btn btn--danger btn--sm" data-action="remove-line" data-index="${idx}">削除</button>
         </td>

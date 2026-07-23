@@ -588,6 +588,77 @@ body {
   font-weight: 600;
 }
 
+/* Line items table -> stacked cards on narrow screens, so the qty stepper
+   never ends up off to the right of a horizontally-scrolling table. */
+@media (max-width: 640px) {
+  .line-items-table thead {
+    display: none;
+  }
+
+  .line-items-table,
+  .line-items-table tbody,
+  .line-items-table tr {
+    display: block;
+    width: 100%;
+    min-width: 0; /* .product-table sets min-width: 720px for wide list tables — not wanted here */
+  }
+
+  .line-items-table tr {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    background: var(--color-bg);
+  }
+
+  .line-items-table tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .line-items-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: none;
+    white-space: normal;
+    text-align: left;
+  }
+
+  .line-items-table td.name-cell {
+    display: block;
+    padding-bottom: 10px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--color-border);
+    font-weight: 600;
+  }
+
+  .line-items-table td[data-label]::before {
+    content: attr(data-label);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+
+  .line-items-table td.actions-col {
+    justify-content: flex-end;
+    padding-top: 8px;
+  }
+
+  .line-items-table .line-input {
+    width: auto;
+    max-width: 130px;
+  }
+
+  .line-items-table .qty-stepper__btn {
+    width: 36px;
+    height: 36px;
+    font-size: 1.15rem;
+  }
+}
+
 /* Product picker (tap-to-add grid) */
 .product-picker {
   margin-top: 20px;
