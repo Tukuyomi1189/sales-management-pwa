@@ -71,6 +71,31 @@ body {
   border: 0;
 }
 
+/* Update banner (normal flow, scrolls away — the sticky header stays reachable below it) */
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--color-primary);
+  color: #fff;
+  padding: 9px 16px;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.update-banner .btn {
+  background: #fff;
+  color: var(--color-primary);
+  border-color: transparent;
+  font-weight: 700;
+}
+
+.update-banner .btn:hover {
+  background: #f0f4ff;
+}
+
 /* Header */
 .app-header {
   display: flex;

@@ -91,12 +91,46 @@
 
   // ---------- Service worker ----------
 
+  const updateBanner = document.getElementById('update-banner');
+  const updateReloadButton = document.getElementById('update-reload-button');
+
+  updateReloadButton.addEventListener('click', () => {
+    location.reload();
+  });
+
   function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) return;
+
+    // install/activate already call skipWaiting()+clients.claim(), so a new SW
+    // takes over quickly — but the page already open keeps running the JS it
+    // already loaded until reloaded. 'controllerchange' fires exactly when a
+    // new SW takes control; if this page already had a controller before that
+    // (i.e. it's not the very first activation ever), that means a newer
+    // version just replaced the one this page is still running, so prompt a
+    // reload instead of leaving people on a stale, silently-outdated screen.
+    let hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) {
+        hadController = true;
+        return;
+      }
+      updateBanner.hidden = false;
+    });
+
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('service-worker.js').catch((err) => {
-        console.error('Service worker registration failed:', err);
-      });
+      navigator.serviceWorker.register('service-worker.js')
+        .then((registration) => {
+          // Catch updates promptly when the user returns to an already-open tab/app,
+          // rather than only whenever the browser happens to check on its own.
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+              registration.update().catch(() => {});
+            }
+          });
+        })
+        .catch((err) => {
+          console.error('Service worker registration failed:', err);
+        });
     });
   }
 
