@@ -141,7 +141,33 @@ function createCrud(storeName) {
   };
 }
 
-const ProductDB = createCrud(STORE_PRODUCTS);
+const ProductDB = {
+  ...createCrud(STORE_PRODUCTS),
+
+  /** First product whose code matches exactly (uses the `code` index). */
+  async findByCode(code) {
+    const clean = String(code || '').trim();
+    if (!clean) return undefined;
+    const matches = await withStore(STORE_PRODUCTS, 'readonly', (store) => requestToPromise(store.index('code').getAll(clean)));
+    return matches[0];
+  },
+
+  /**
+   * The product whose stock this product actually uses. Products with `stockSourceCode`
+   * (e.g. 「新刊（無償）」) share the stock of the product with that code; everything else
+   * uses its own. Linked by product CODE rather than id because ids are re-assigned on
+   * JSON import (moving products to another device) while codes stay the same. If the
+   * source can't be found the product falls back to its own stock.
+   */
+  async getStockOwner(id) {
+    const product = await ProductDB.get(id);
+    if (!product) return undefined;
+    const code = String(product.stockSourceCode || '').trim();
+    if (!code) return product;
+    const source = await ProductDB.findByCode(code);
+    return source && source.id !== product.id ? source : product;
+  },
+};
 const CustomerDB = createCrud(STORE_CUSTOMERS);
 
 // ---------- Sales: line-item transactions that also adjust product stock ----------
@@ -163,10 +189,11 @@ function localDateString(d) {
 async function adjustStockLocally(items, sign) {
   for (const item of items) {
     if (!item.productId) continue;
-    const product = await ProductDB.get(item.productId);
-    if (!product) continue;
-    const nextStock = (Number(product.stock) || 0) + sign * Number(item.quantity);
-    await ProductDB.update(item.productId, { stock: nextStock });
+    // Shared-stock products (stockSourceCode) move the stock of their source product.
+    const owner = await ProductDB.getStockOwner(item.productId);
+    if (!owner) continue;
+    const nextStock = (Number(owner.stock) || 0) + sign * Number(item.quantity);
+    await ProductDB.update(owner.id, { stock: nextStock });
   }
 }
 
@@ -189,6 +216,30 @@ function sortSales(all) {
   return all.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
 }
 
+/**
+ * Firestore write promises (setDoc/updateDoc/deleteDoc) only resolve once the
+ * SERVER acknowledges the write — a network round trip online, and never while
+ * offline. The write itself lands in the local persistent cache (and fires
+ * onSnapshot listeners) immediately, so we don't await the server ack: the UI
+ * moves on right away and Firestore syncs in the background. A server-side
+ * rejection (e.g. security rules) is surfaced as an error toast instead.
+ */
+function syncInBackground(writePromise, label) {
+  writePromise.catch((err) => {
+    console.error(`SalesDB ${label} sync failed:`, err);
+    window.App?.showToast(`クラウドへの同期に失敗しました(${label}): ${err.message}`, true);
+  });
+}
+
+/** Read a sale, preferring the local cache (instant; the live subscription keeps it warm) over a server round trip. */
+async function readSaleDoc(fs, docRef) {
+  try {
+    return await fs.getDocFromCache(docRef);
+  } catch {
+    return fs.getDoc(docRef);
+  }
+}
+
 const SalesDB = {
   async add(sale) {
     const { fs } = await window.Cloud.ready;
@@ -202,7 +253,8 @@ const SalesDB = {
       createdAt: nowIso,
       updatedAt: nowIso,
     };
-    const docRef = await fs.addDoc(col, record);
+    const docRef = fs.doc(col); // auto-generated ID, known locally before any network I/O
+    syncInBackground(fs.setDoc(docRef, record), '登録');
     await adjustStockLocally(sale.items, -1);
     return docRef.id;
   },
@@ -212,7 +264,7 @@ const SalesDB = {
     const { fs } = await window.Cloud.ready;
     const col = await salesCollection();
     const docRef = fs.doc(col, id);
-    const snap = await fs.getDoc(docRef);
+    const snap = await readSaleDoc(fs, docRef);
     if (!snap.exists()) throw new Error(`Sale with id ${id} not found`);
     const existing = snap.data();
 
@@ -225,7 +277,7 @@ const SalesDB = {
       totalAmount: calcTotal(safeChanges.items || existing.items),
       updatedAt: new Date().toISOString(),
     };
-    await fs.updateDoc(docRef, updated);
+    syncInBackground(fs.updateDoc(docRef, updated), '更新');
     await adjustStockLocally(updated.items || existing.items, -1);
     return { ...existing, ...updated, id };
   },
@@ -234,11 +286,11 @@ const SalesDB = {
     const { fs } = await window.Cloud.ready;
     const col = await salesCollection();
     const docRef = fs.doc(col, id);
-    const snap = await fs.getDoc(docRef);
+    const snap = await readSaleDoc(fs, docRef);
     if (snap.exists()) {
       await adjustStockLocally(snap.data().items, +1);
     }
-    await fs.deleteDoc(docRef);
+    syncInBackground(fs.deleteDoc(docRef), '削除');
   },
 
   async get(id) {
@@ -268,8 +320,11 @@ const SalesDB = {
       if (cancelled) return;
       window.Cloud.ready.then(({ fs }) => {
         if (cancelled) return;
-        unsubscribe = fs.onSnapshot(col, (snap) => {
-          callback(sortSales(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+        // includeMetadataChanges: also fire when a local write finishes syncing,
+        // so the list can drop its "同期待ち" marker. `pending` is UI-only state
+        // (never written back to Firestore; stripped on JSON export).
+        unsubscribe = fs.onSnapshot(col, { includeMetadataChanges: true }, (snap) => {
+          callback(sortSales(snap.docs.map((d) => ({ id: d.id, ...d.data(), pending: d.metadata.hasPendingWrites }))));
         }, (err) => console.error('SalesDB.subscribe error:', err));
       });
     });

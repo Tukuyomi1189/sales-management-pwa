@@ -34,95 +34,150 @@
 </header>
 
 <nav class="tab-nav" aria-label="画面切り替え">
-  <button type="button" class="tab-nav__btn" data-view="sales">売上入力</button>
+  <button type="button" class="tab-nav__btn" data-view="sales">レジ</button>
+  <button type="button" class="tab-nav__btn" data-view="history">売上履歴</button>
   <button type="button" class="tab-nav__btn" data-view="reports">レポート</button>
   <button type="button" class="tab-nav__btn" data-view="products">商品マスタ</button>
   <button type="button" class="tab-nav__btn" data-view="customers">顧客管理</button>
+  <button type="button" class="tab-nav__btn" data-view="settings">設定</button>
 </nav>
 
 <main class="container">
 
-<!-- ============ 売上入力 ============ -->
-<section class="view" data-view-panel="sales" hidden>
-  <p class="tagline">売上を記録すると、明細の商品在庫が自動的に減算されます。売上データはオンライン時に共有コード単位でリアルタイム同期され、オフラインでも引き続き利用できます。</p>
-
-  <section class="panel">
-    <h2 class="panel__title">共有コード(売上のリアルタイム同期)</h2>
-    <p class="tagline">同じ共有コードを入力した端末同士で、売上データがリアルタイムに共有されます。共有コードはパスワードのように扱ってください。商品・顧客マスタはまだ端末ごとのローカルデータです。</p>
-    <div class="workspace-code-bar">
-      <span class="workspace-code-bar__label">共有コード:</span>
-      <strong id="workspace-code-display">------</strong>
-      <button type="button" id="workspace-code-copy" class="btn btn--ghost btn--sm">コピー</button>
-      <button type="button" id="workspace-code-join" class="btn btn--ghost btn--sm">別のコードに参加</button>
-      <button type="button" id="workspace-migrate-button" class="btn btn--ghost btn--sm">ローカルの売上データをアップロード</button>
-    </div>
-    <p class="form-message" id="workspace-message" role="status" aria-live="polite"></p>
-  </section>
-
-  <section class="panel" aria-labelledby="sale-form-heading">
-    <h2 id="sale-form-heading" class="panel__title">
-      <span id="sale-form-mode-label">売上を登録</span>
-    </h2>
-    <form id="sale-form" class="product-form" novalidate>
-      <input type="hidden" id="sale-id" />
-
-      <div class="form-grid">
-        <div class="field">
-          <label for="sale-field-customer">顧客</label>
-          <select id="sale-field-customer">
-            <option value="">選択なし(一般客)</option>
-          </select>
-        </div>
-        <div class="field field--wide">
-          <label for="sale-field-note">メモ</label>
-          <input type="text" id="sale-field-note" placeholder="任意メモ" autocomplete="off" />
+<!-- ============ レジ(売上入力) ============ -->
+<!-- Hash stays "#sales" so existing bookmarks / home-screen shortcuts keep opening the register. -->
+<section class="view view--register" data-view-panel="sales" hidden>
+  <div class="register">
+    <section class="register__products" aria-label="商品">
+      <div class="register__toolbar">
+        <div id="register-category-tabs" class="category-tabs" role="toolbar" aria-label="カテゴリで絞り込み"></div>
+        <div class="register__search">
+          <label for="sale-product-search" class="sr-only">商品検索・バーコード</label>
+          <input type="search" id="sale-product-search" placeholder="商品検索・バーコード" autocomplete="off" enterkeyhint="search" />
         </div>
       </div>
+      <div id="sale-product-grid" class="product-grid"></div>
+    </section>
 
-      <div class="product-picker">
-        <div class="product-picker__header">
-          <h3>商品を選ぶ(タップで追加)</h3>
-          <div class="field field--search">
-            <label for="sale-product-search" class="sr-only">商品検索</label>
-            <input type="search" id="sale-product-search" placeholder="商品名・商品コードで検索" autocomplete="off" />
+    <section class="register__cart" aria-labelledby="sale-form-mode-label">
+      <div class="cart__header">
+        <h2 id="sale-form-mode-label" class="cart__title">ご注文</h2>
+        <button type="button" id="cart-clear-button" class="btn btn--ghost btn--sm" disabled>全取消</button>
+      </div>
+
+      <div id="sale-edit-banner" class="edit-banner" hidden>
+        <span id="sale-edit-label">過去の売上を編集中</span>
+        <button type="button" id="sale-cancel-edit-button" class="btn btn--ghost btn--sm">編集をやめる</button>
+      </div>
+
+      <ul id="line-items-body" class="cart-list" aria-label="カートの商品"></ul>
+      <p id="line-items-empty" class="cart-empty">左の商品をタップして追加</p>
+
+      <details class="cart__extra" id="sale-extra">
+        <summary>顧客・メモ<span id="sale-extra-summary" class="cart__extra-summary"></span></summary>
+        <div class="cart__extra-fields">
+          <div class="field">
+            <label for="sale-field-customer">顧客</label>
+            <select id="sale-field-customer">
+              <option value="">選択なし(一般客)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="sale-field-note">メモ</label>
+            <input type="text" id="sale-field-note" placeholder="任意メモ" autocomplete="off" />
           </div>
         </div>
-        <div id="sale-product-grid" class="product-grid"></div>
-      </div>
+      </details>
 
-      <div class="line-items">
-        <div class="line-items__header">
-          <h3>明細</h3>
+      <div id="sale-checkout-bar" class="checkout-bar is-empty">
+        <div class="checkout-bar__summary" aria-live="polite" aria-atomic="true">
+          <span class="checkout-bar__count" id="sale-total-count">0点</span>
+          <span class="checkout-bar__label">合計</span>
+          <span class="checkout-bar__amount">
+            <strong class="checkout-bar__total" id="sale-total-display">¥0</strong>
+            <span class="checkout-bar__delta" id="sale-total-delta" aria-hidden="true"></span>
+          </span>
         </div>
-        <div class="table-wrap">
-          <table class="product-table line-items-table">
-            <thead>
-              <tr>
-                <th scope="col">商品</th>
-                <th scope="col" class="num">単価</th>
-                <th scope="col" class="num">数量</th>
-                <th scope="col" class="num">小計</th>
-                <th scope="col" class="actions-col">操作</th>
-              </tr>
-            </thead>
-            <tbody id="line-items-body"></tbody>
-          </table>
-          <p id="line-items-empty" class="empty-state">上の商品一覧からタップして追加してください。</p>
+        <button type="button" id="sale-submit-button" class="btn btn--primary checkout-bar__submit">お会計</button>
+        <span id="sale-form-message" class="form-message checkout-bar__message" role="alert" aria-live="polite"></span>
+      </div>
+    </section>
+  </div>
+
+  <!-- Checkout: tender (お預かり) → done (お釣り). Payment methods come from PAYMENT_METHODS in js/register.js. -->
+  <dialog id="checkout-dialog" class="checkout-dialog" aria-labelledby="checkout-title">
+    <div class="checkout-step" data-step="tender">
+      <div class="checkout-dialog__head">
+        <h2 id="checkout-title">お会計</h2>
+        <button type="button" class="btn btn--ghost" data-checkout="back">戻る</button>
+      </div>
+      <div class="checkout-dialog__body">
+        <div class="checkout-summary">
+          <div class="checkout-summary__row checkout-summary__row--total">
+            <span>合計<small id="checkout-count"></small></span>
+            <strong id="checkout-total">¥0</strong>
+          </div>
+          <div id="checkout-methods" class="payment-methods" role="radiogroup" aria-label="支払い方法"></div>
+          <div id="checkout-tender-rows">
+            <div class="checkout-summary__row">
+              <span>お預かり</span>
+              <strong id="checkout-received" class="checkout-received">¥0</strong>
+            </div>
+            <div class="checkout-summary__row checkout-summary__row--change">
+              <span id="checkout-change-label">お釣り</span>
+              <strong id="checkout-change">-</strong>
+            </div>
+          </div>
+          <p id="checkout-warning" class="checkout-warning" hidden></p>
         </div>
-        <div class="line-items__total">合計金額: <strong id="sale-total-display">¥0</strong></div>
+        <div id="checkout-pad" class="tender-pad">
+          <!-- 「ちょうど」+ amount buttons; the amounts are set in 設定 → お預かりボタンの金額 (js/register.js renders them) -->
+          <div id="tender-quick" class="tender-pad__quick">
+            <button type="button" class="tender-btn tender-btn--exact" data-tender="exact">ちょうど</button>
+          </div>
+          <div class="tender-pad__keys">
+            <button type="button" class="tender-key" data-key="7">7</button>
+            <button type="button" class="tender-key" data-key="8">8</button>
+            <button type="button" class="tender-key" data-key="9">9</button>
+            <button type="button" class="tender-key" data-key="4">4</button>
+            <button type="button" class="tender-key" data-key="5">5</button>
+            <button type="button" class="tender-key" data-key="6">6</button>
+            <button type="button" class="tender-key" data-key="1">1</button>
+            <button type="button" class="tender-key" data-key="2">2</button>
+            <button type="button" class="tender-key" data-key="3">3</button>
+            <button type="button" class="tender-key" data-key="0">0</button>
+            <button type="button" class="tender-key" data-key="00">00</button>
+            <button type="button" class="tender-key tender-key--fn" data-key="back" aria-label="1文字消す">⌫</button>
+          </div>
+          <button type="button" class="tender-btn tender-btn--clear" data-tender="clear">クリア</button>
+        </div>
       </div>
-
-      <div class="form-actions">
-        <button type="submit" id="sale-submit-button" class="btn btn--primary">登録する</button>
-        <button type="button" id="sale-cancel-edit-button" class="btn btn--ghost" hidden>編集をキャンセル</button>
-        <span id="sale-form-message" class="form-message" role="alert" aria-live="polite"></span>
+      <div class="checkout-dialog__foot">
+        <button type="button" id="checkout-confirm" class="btn btn--primary checkout-dialog__confirm" data-checkout="confirm" disabled>会計を確定</button>
       </div>
-    </form>
-  </section>
+    </div>
 
+    <div class="checkout-step checkout-done" data-step="done" hidden>
+      <div class="checkout-done__check" aria-hidden="true">✓</div>
+      <p class="checkout-done__title">会計が完了しました</p>
+      <div class="checkout-done__change">
+        <span id="checkout-done-change-label">お釣り</span>
+        <strong id="checkout-done-change">¥0</strong>
+      </div>
+      <p id="checkout-done-detail" class="checkout-done__detail"></p>
+      <div class="checkout-done__actions">
+        <button type="button" class="btn btn--ghost" data-checkout="void">この会計を取り消す</button>
+        <button type="button" class="btn btn--primary checkout-done__next" data-checkout="next">次のお客様</button>
+      </div>
+    </div>
+  </dialog>
+</section>
+
+<!-- ============ 売上履歴 ============ -->
+<section class="view" data-view-panel="history" hidden>
   <section class="panel" aria-labelledby="sale-list-heading">
     <div class="panel__header">
-      <h2 id="sale-list-heading" class="panel__title">売上一覧</h2>
+      <h2 id="sale-list-heading" class="panel__title">売上履歴</h2>
       <div class="summary" id="sale-summary-stats" aria-live="polite"></div>
     </div>
     <div class="toolbar">
@@ -149,6 +204,7 @@
             <th scope="col">顧客</th>
             <th scope="col">明細</th>
             <th scope="col" class="num">合計金額</th>
+            <th scope="col">支払い</th>
             <th scope="col">更新日時</th>
             <th scope="col" class="actions-col">操作</th>
           </tr>
@@ -157,6 +213,42 @@
       </table>
       <p id="sale-empty-state" class="empty-state" hidden>登録されている売上がありません。</p>
     </div>
+  </section>
+</section>
+
+<!-- ============ 設定 ============ -->
+<section class="view" data-view-panel="settings" hidden>
+  <section class="panel">
+    <h2 class="panel__title">共有コード(売上のリアルタイム同期)</h2>
+    <p class="tagline">同じ共有コードを入力した端末同士で、売上データがリアルタイムに共有されます。オフライン中に登録した売上は端末内に保存され、オンライン復帰時に自動で同期されます。共有コードはパスワードのように扱ってください。商品・顧客マスタはまだ端末ごとのローカルデータです。</p>
+    <div class="workspace-code-bar">
+      <span class="workspace-code-bar__label">共有コード:</span>
+      <strong id="workspace-code-display">------</strong>
+      <button type="button" id="workspace-code-copy" class="btn btn--ghost btn--sm">コピー</button>
+      <button type="button" id="workspace-code-join" class="btn btn--ghost btn--sm">別のコードに参加</button>
+      <button type="button" id="workspace-migrate-button" class="btn btn--ghost btn--sm">ローカルの売上データをアップロード</button>
+    </div>
+    <p class="form-message" id="workspace-message" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="panel" aria-labelledby="register-settings-heading">
+    <h2 id="register-settings-heading" class="panel__title">レジの設定(この端末)</h2>
+    <form id="tender-settings-form" class="tender-settings" novalidate>
+      <div class="field">
+        <label for="tender-amounts-input">お預かりボタンの金額</label>
+        <input type="text" id="tender-amounts-input" inputmode="numeric" autocomplete="off" placeholder="例: 300, 500, 1000" />
+        <span class="field-hint">会計画面で「ちょうど」の後ろに並ぶボタンです。カンマかスペースで区切って最大8個(1000 のように桁区切りなしで入力)。押すたびにお預かりに加算されます(例: 500を2回で¥1,000)。</span>
+      </div>
+      <div class="tender-settings__preview" aria-label="プレビュー">
+        <span class="tender-settings__preview-label">プレビュー</span>
+        <div id="tender-amounts-preview" class="tender-settings__chips"></div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary">保存する</button>
+        <button type="button" id="tender-amounts-reset" class="btn btn--ghost">初期値に戻す</button>
+        <span id="tender-settings-message" class="form-message" role="status" aria-live="polite"></span>
+      </div>
+    </form>
   </section>
 </section>
 
@@ -218,6 +310,21 @@
       <div id="report-customer-ranking" class="ranking-wrap"></div>
     </section>
   </div>
+
+  <section class="panel" aria-labelledby="settlement-heading">
+    <div class="panel__header">
+      <h2 id="settlement-heading" class="panel__title">精算(精算先ごと)</h2>
+      <button type="button" id="settlement-csv-button" class="btn btn--ghost btn--sm">CSVで保存</button>
+    </div>
+    <p class="tagline settlement-note" id="settlement-period"></p>
+    <div id="settlement-body"></div>
+    <div id="settlement-selection" class="settlement-selection" hidden aria-live="polite">
+      <span class="settlement-selection__label">選択した商品</span>
+      <span id="settlement-selection-detail" class="settlement-selection__detail"></span>
+      <strong id="settlement-selection-total" class="settlement-selection__total"></strong>
+      <button type="button" id="settlement-selection-clear" class="btn btn--ghost btn--sm">選択を解除</button>
+    </div>
+  </section>
 </section>
 
 <!-- ============ 商品マスタ ============ -->
@@ -247,14 +354,29 @@
           <input type="text" id="field-category" name="category" placeholder="例: 資材" autocomplete="off" />
         </div>
 
-        <div class="field field--required">
-          <label for="field-price">単価(円) <span class="req">必須</span></label>
-          <input type="number" id="field-price" name="price" min="0" step="1" inputmode="numeric" required />
+        <div class="field">
+          <label for="field-payee">精算先</label>
+          <input type="text" id="field-payee" name="payee" placeholder="例: Aさん" list="payee-options" autocomplete="off" />
+          <datalist id="payee-options"></datalist>
+          <span class="field-hint">合同・委託などで売上を分けるときの相手(レポートの「精算」で集計)</span>
         </div>
 
         <div class="field field--required">
-          <label for="field-stock">在庫数 <span class="req">必須</span></label>
+          <label for="field-price">単価(円) <span class="req">必須</span></label>
+          <input type="number" id="field-price" name="price" min="0" step="1" inputmode="numeric" placeholder="例: 1000" required />
+        </div>
+
+        <div class="field field--required">
+          <label for="field-stock">在庫数 <span class="req" id="field-stock-req">必須</span></label>
           <input type="number" id="field-stock" name="stock" min="0" step="1" inputmode="numeric" required />
+        </div>
+
+        <div class="field">
+          <label for="field-stock-source">在庫を共有する商品</label>
+          <select id="field-stock-source" name="stockSourceCode">
+            <option value="">共有しない</option>
+          </select>
+          <span class="field-hint" id="field-stock-source-hint">無償譲渡用など、別の商品と在庫を共通にするときに選択</span>
         </div>
 
         <div class="field">
@@ -415,8 +537,11 @@
 <script src="js/router.js"></script>
 <script src="js/products.js"></script>
 <script src="js/customers.js"></script>
-<script src="js/sales.js"></script>
+<script src="js/register.js"></script>
+<script src="js/history.js"></script>
+<script src="js/settings.js"></script>
 <script src="js/reports.js"></script>
+<script src="js/settlement.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

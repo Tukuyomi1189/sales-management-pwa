@@ -260,12 +260,13 @@
     for (const s of filtered) {
       for (const item of s.items) {
         const key = item.productId || item.productName;
-        const prev = map.get(key) || { name: item.productName, amount: 0 };
+        const prev = map.get(key) || { name: item.productName, amount: 0, qty: 0 };
         prev.amount += Number(item.unitPrice) * Number(item.quantity);
+        prev.qty += Number(item.quantity) || 0;
         map.set(key, prev);
       }
     }
-    return [...map.values()].sort((a, b) => b.amount - a.amount).slice(0, 8);
+    return [...map.values()].sort((a, b) => b.amount - a.amount || b.qty - a.qty).slice(0, 8);
   }
 
   function aggregateCustomers(filtered) {
@@ -292,7 +293,7 @@
         <div class="ranking-row__track">
           <div class="ranking-row__bar" style="width:${Math.max(4, (r.amount / max) * 100)}%"></div>
         </div>
-        <div class="ranking-row__value">${window.App.formatCurrency(r.amount)}</div>
+        <div class="ranking-row__value">${window.App.formatCurrency(r.amount)}${r.qty != null ? ` ・${r.qty}点` : ''}</div>
       </div>
     `).join('');
   }
@@ -317,6 +318,7 @@
     renderChart(filtered, from, to);
     renderRanking(productRankingContainer, aggregateProducts(filtered));
     renderRanking(customerRankingContainer, aggregateCustomers(filtered));
+    window.SettlementView?.render(filtered, { from, to });
   }
 
   presetSelect.addEventListener('change', render);

@@ -42,14 +42,31 @@
     ));
   }
 
-  function showToast(message, isError = false) {
+  /**
+   * Show a toast. Optional `action` ({ label, onClick }) adds a button such as
+   * "元に戻す" — used instead of confirm() dialogs so the register flow never blocks.
+   */
+  function showToast(message, isError = false, action = null) {
     clearTimeout(toastTimer);
     toast.textContent = message;
     toast.classList.toggle('toast--error', isError);
+    toast.classList.toggle('toast--with-action', !!action);
+    if (action) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toast__action';
+      btn.textContent = action.label;
+      btn.addEventListener('click', () => {
+        clearTimeout(toastTimer);
+        toast.hidden = true;
+        action.onClick();
+      }, { once: true });
+      toast.append(btn);
+    }
     toast.hidden = false;
     toastTimer = setTimeout(() => {
       toast.hidden = true;
-    }, 2600);
+    }, action ? 6000 : 2600);
   }
 
   window.App = { formatCurrency, formatDateTime, escapeHtml, showToast };
@@ -136,7 +153,25 @@
 
   // ---------- Init ----------
 
+  // ---------- Layout: expose header+tab height so the register can fill exactly one screen ----------
+
+  const appHeader = document.querySelector('.app-header');
+  const tabNav = document.querySelector('.tab-nav');
+
+  function updateChromeHeight() {
+    const banner = updateBanner.hidden ? 0 : updateBanner.offsetHeight;
+    const h = appHeader.offsetHeight + tabNav.offsetHeight + banner;
+    document.documentElement.style.setProperty('--chrome-h', `${h}px`);
+  }
+
+  if ('ResizeObserver' in window) {
+    const ro = new ResizeObserver(updateChromeHeight);
+    [appHeader, tabNav, updateBanner].forEach((el) => ro.observe(el));
+  }
+  window.addEventListener('resize', updateChromeHeight);
+
   function init() {
+    updateChromeHeight();
     updateConnectionStatus();
     registerServiceWorker();
     window.Router.render();
