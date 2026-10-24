@@ -30,6 +30,10 @@
     return sale.items.map((i) => `${i.productName} × ${i.quantity}`).join(', ');
   }
 
+  function itemsSummaryHtml(sale) {
+    return sale.items.map((i) => `${i.ageRestricted ? '<span class="age-tag age-tag--sm">年齢確認</span>' : ''}${esc(i.productName)} × ${i.quantity}`).join(', ');
+  }
+
   function paymentHtml(sale) {
     const p = sale.payment;
     if (!p || !p.method) return '<span class="muted">-</span>';
@@ -64,7 +68,7 @@
         </td>
         <td>${window.App.formatDateTime(s.createdAt)}${s.pending ? ' <span class="sync-pill" title="この端末には保存済み。オンライン時にクラウドへ自動同期されます">同期待ち</span>' : ''}</td>
         <td>${esc(s.customerName) || '一般客'}</td>
-        <td class="name-cell">${esc(itemsSummaryText(s))}${s.note ? `<span class="payment-detail">メモ: ${esc(s.note)}</span>` : ''}</td>
+        <td class="name-cell">${itemsSummaryHtml(s)}${s.note ? `<span class="payment-detail">メモ: ${esc(s.note)}</span>` : ''}</td>
         <td class="num">${fmt(s.totalAmount)}</td>
         <td>${paymentHtml(s)}</td>
         <td>${window.App.formatDateTime(s.updatedAt)}</td>
@@ -287,6 +291,7 @@
                 productName: String(i.productName),
                 unit: i.unit || '',
                 payee: typeof i.payee === 'string' ? i.payee : '',
+                ...(i.ageRestricted === true ? { ageRestricted: true } : {}),
                 unitPrice: Number(i.unitPrice) || 0,
                 quantity: Number(i.quantity) || 0,
               })),

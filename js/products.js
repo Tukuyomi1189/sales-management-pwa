@@ -15,6 +15,8 @@
   const stockSourceField = document.getElementById('field-stock-source');
   const payeeField = document.getElementById('field-payee');
   const payeeOptions = document.getElementById('payee-options');
+  const ageField = document.getElementById('field-age-restricted');
+  const sortButtons = document.querySelectorAll('#product-table .sort-btn');
   const stockSourceHint = document.getElementById('field-stock-source-hint');
   const stockReq = document.getElementById('field-stock-req');
 
@@ -119,6 +121,7 @@
     unitField.value = product.unit || '';
     noteField.value = product.note || '';
     payeeField.value = product.payee || '';
+    ageField.checked = !!product.ageRestricted;
     renderStockSourceOptions(sourceCodeOf(product));
 
     formModeLabel.textContent = `商品を編集中: ${product.name}`;
@@ -142,6 +145,7 @@
       note: noteField.value.trim(),
       stockSourceCode: stockSourceField.value.trim(),
       payee: payeeField.value.trim(),
+      ageRestricted: ageField.checked,
     };
   }
 
@@ -225,6 +229,65 @@
     }
   }
 
+  // ---------- Sorting (tap a column header; tap again to reverse) ----------
+
+  const SORT_KEY = 'sales-management-product-sort';
+  let sortState = { key: 'updatedAt', dir: 'desc' }; // default = previous behaviour (newest first)
+  try {
+    const saved = JSON.parse(localStorage.getItem(SORT_KEY) || 'null');
+    if (saved && saved.key && (saved.dir === 'asc' || saved.dir === 'desc')) sortState = saved;
+  } catch { /* use default */ }
+
+  const jaCompare = (a, b) => a.localeCompare(b, 'ja', { numeric: true });
+  /** Blank values always go last, whichever direction. */
+  function compareText(a, b, dir) {
+    if (!a !== !b) return a ? -1 : 1;
+    return dir * jaCompare(a, b);
+  }
+
+  function effectiveStock(p) {
+    const source = sourceCodeOf(p) ? stockSourceOf(p) : null;
+    return Number((source || p).stock) || 0;
+  }
+
+  function sortProducts(products) {
+    const dir = sortState.dir === 'asc' ? 1 : -1;
+    const byName = (a, b) => jaCompare(a.name || '', b.name || '');
+    const cmp = {
+      code: (a, b) => compareText(codeOf(a), codeOf(b), dir),
+      name: (a, b) => dir * byName(a, b),
+      category: (a, b) => compareText((a.category || '').trim(), (b.category || '').trim(), dir),
+      price: (a, b) => dir * ((Number(a.price) || 0) - (Number(b.price) || 0)),
+      stock: (a, b) => dir * (effectiveStock(a) - effectiveStock(b)),
+      updatedAt: (a, b) => dir * (a.updatedAt || '').localeCompare(b.updatedAt || ''),
+    }[sortState.key] || (() => 0);
+    return [...products].sort((a, b) => cmp(a, b) || byName(a, b) || a.id - b.id);
+  }
+
+  function renderSortHeaders() {
+    for (const btn of sortButtons) {
+      const active = btn.dataset.sort === sortState.key;
+      btn.classList.toggle('is-active', active);
+      btn.dataset.dir = active ? sortState.dir : '';
+      btn.closest('th').setAttribute('aria-sort', active ? (sortState.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+    }
+  }
+
+  for (const btn of sortButtons) {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.sort;
+      // Text/number columns start ascending; 更新日時 starts newest-first.
+      const firstDir = key === 'updatedAt' ? 'desc' : 'asc';
+      sortState = sortState.key === key
+        ? { key, dir: sortState.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: firstDir };
+      try { localStorage.setItem(SORT_KEY, JSON.stringify(sortState)); } catch { /* ignore */ }
+      renderSortHeaders();
+      const visible = filterProducts(allProducts, searchInput.value);
+      renderTable(visible);
+    });
+  }
+
   function filterProducts(products, query) {
     const q = query.trim().toLowerCase();
     if (!q) return products;
@@ -235,7 +298,8 @@
     ));
   }
 
-  function renderTable(products) {
+  function renderTable(unsorted) {
+    const products = sortProducts(unsorted);
     tableBody.innerHTML = '';
     emptyState.hidden = products.length !== 0;
 
@@ -252,7 +316,7 @@
 
       tr.innerHTML = `
         <td>${window.App.escapeHtml(p.code) || '-'}</td>
-        <td class="name-cell">${esc(p.name)}${p.payee ? `<span class="payment-detail">精算先: ${esc(p.payee)}</span>` : ''}</td>
+        <td class="name-cell">${p.ageRestricted ? '<span class="age-tag age-tag--sm">年齢確認</span>' : ''}${esc(p.name)}${p.payee ? `<span class="payment-detail">精算先: ${esc(p.payee)}</span>` : ''}</td>
         <td>${window.App.escapeHtml(p.category) || '-'}</td>
         <td class="num">${window.App.formatCurrency(p.price)}</td>
         <td class="num">${stockCell}</td>
@@ -361,6 +425,7 @@
           note: item.note || '',
           stockSourceCode: item.stockSourceCode ? String(item.stockSourceCode).trim() : '',
           payee: item.payee ? String(item.payee).trim() : '',
+          ageRestricted: item.ageRestricted === true,
           createdAt: item.createdAt,
         }));
 
@@ -382,6 +447,7 @@
     importInput.value = '';
   });
 
+  renderSortHeaders();
   window.ProductsView = { refreshList };
   window.Router.onViewActivate('products', refreshList);
 })();

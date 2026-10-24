@@ -63,6 +63,13 @@
     return getTenderAmounts();
   }
 
+  /**
+   * Custom order of the product buttons (並べ替え), per device. Stored as product keys —
+   * `code:<商品コード>` (stable across JSON import) or `id:<id>` for products without a code.
+   * Products not in the saved order follow, in the default code/name order.
+   */
+  const TILE_ORDER_KEY = 'sales-management-tile-order';
+
   const CATEGORY_COLORS = ['#2f6fed', '#1f9d55', '#d97706', '#c2417a', '#7c3aed', '#0e9aa7', '#b45309', '#64748b'];
   const LOW_STOCK = 5;
   const NO_CATEGORY = '__none__'; // tab id for products without a category (「その他」)
@@ -83,6 +90,11 @@
   const clearCartButton = $('cart-clear-button');
 
   const categoryTabs = $('register-category-tabs');
+  const arrangeButton = $('tile-arrange-button');
+  const arrangeBar = $('arrange-bar');
+  const arrangeResetButton = $('arrange-reset-button');
+  const arrangeDoneButton = $('arrange-done-button');
+  const cartAgeBanner = $('cart-age-banner');
   const productSearchInput = $('sale-product-search');
   const productGrid = $('sale-product-grid');
 
@@ -105,6 +117,7 @@
   const coChange = $('checkout-change');
   const coChangeLabel = $('checkout-change-label');
   const coWarning = $('checkout-warning');
+  const coAgeNotice = $('checkout-age-notice');
   const coPad = $('checkout-pad');
   const coQuick = $('tender-quick');
   const coConfirm = $('checkout-confirm');
@@ -186,8 +199,42 @@
       a.id - b.id;
   }
 
+  // ---------- Button order (並べ替え) ----------
+
+  const tileKey = (p) => ((p.code || '').trim() ? `code:${p.code.trim()}` : `id:${p.id}`);
+
+  function loadTileOrder() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(TILE_ORDER_KEY) || 'null');
+      return Array.isArray(saved) ? saved : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveTileOrder(keys) {
+    try {
+      if (keys) localStorage.setItem(TILE_ORDER_KEY, JSON.stringify(keys));
+      else localStorage.removeItem(TILE_ORDER_KEY);
+    } catch { /* storage unavailable — order lasts until reload */ }
+  }
+
+  /** Default code/name order, then the saved custom order on top of it. */
+  function sortForRegister(products) {
+    const sorted = [...products].sort(pickerOrder);
+    const order = loadTileOrder();
+    if (!order) return sorted;
+    const rank = new Map(order.map((k, i) => [k, i]));
+    const pos = new Map(sorted.map((p, i) => [p.id, i]));
+    return sorted.sort((a, b) => {
+      const ra = rank.has(tileKey(a)) ? rank.get(tileKey(a)) : Infinity;
+      const rb = rank.has(tileKey(b)) ? rank.get(tileKey(b)) : Infinity;
+      return ra !== rb ? ra - rb : pos.get(a.id) - pos.get(b.id);
+    });
+  }
+
   async function refreshProductsCache() {
-    productsCache = (await window.ProductDB.getAll()).sort(pickerOrder);
+    productsCache = sortForRegister(await window.ProductDB.getAll());
     productMap = new Map(productsCache.map((p) => [p.id, p]));
     productByCode = new Map();
     for (const p of productsCache) {
@@ -286,11 +333,13 @@
     const soldOut = stock <= 0;
     const low = !soldOut && stock <= LOW_STOCK;
     const free = Number(p.price) === 0;
+    const age = !!p.ageRestricted;
     const color = categoryColor.get((p.category || '').trim());
     const stockText = soldOut ? '在庫切れ' : `残り ${esc(owner.stock)}${esc(owner.unit || p.unit) || ''}`;
     return `
-      <button type="button" class="product-tile ${qty ? 'is-in-cart' : ''} ${soldOut ? 'is-sold-out' : ''} ${free ? 'is-free' : ''}" data-product-id="${p.id}"${color ? ` style="--cat:${color}"` : ''}>
+      <button type="button" class="product-tile ${qty ? 'is-in-cart' : ''} ${soldOut ? 'is-sold-out' : ''} ${free ? 'is-free' : ''} ${age ? 'is-age-restricted' : ''}" data-product-id="${p.id}"${color ? ` style="--cat:${color}"` : ''}>
         ${qty ? `<span class="product-tile__cart-badge">${qty}</span>` : ''}
+        ${age ? '<span class="age-tag product-tile__age">年齢確認</span>' : ''}
         <span class="product-tile__name">${esc(p.name)}</span>
         <span class="product-tile__price">${free ? '<span class="free-tag">無償</span>' : fmt(p.price)}</span>
         <span class="product-tile__stock ${low || soldOut ? 'stock-hint--low' : ''}">${stockText}${shared ? '<span class="shared-tag" title="' + esc(owner.name) + ' と在庫を共有">共通</span>' : ''}</span>
@@ -368,7 +417,7 @@
 
   productGrid.addEventListener('click', (event) => {
     const tile = event.target.closest('.product-tile');
-    if (!tile) return;
+    if (!tile || arranging) return; // while arranging, taps/drags never add to the cart
     addProductToCart(Number(tile.dataset.productId));
   });
 
@@ -393,6 +442,93 @@
       window.App.showToast(visible.length ? '候補が複数あります。商品をタップしてください。' : `「${productSearchInput.value.trim()}」に該当する商品がありません。`, !visible.length);
     }
   });
+
+  // ---------- Arrange mode: drag buttons into any order ----------
+
+  let arranging = false;
+  let drag = null; // { tile, pointerId }
+
+  function setArranging(on) {
+    arranging = on;
+    productGrid.classList.toggle('is-arranging', on);
+    arrangeBar.hidden = !on;
+    arrangeButton.hidden = on;
+    if (on) {
+      // Show every button so the whole order can be arranged.
+      productSearchInput.value = '';
+      activeCategory = '';
+      renderCategoryTabs();
+      applyProductFilter();
+    }
+    for (const t of categoryTabs.querySelectorAll('.category-tab')) t.disabled = on;
+    productSearchInput.disabled = on;
+  }
+
+  function currentTileOrder() {
+    return [...productGrid.querySelectorAll('.product-tile')]
+      .map((t) => productMap.get(Number(t.dataset.productId)))
+      .filter(Boolean)
+      .map(tileKey);
+  }
+
+  arrangeButton.addEventListener('click', () => setArranging(true));
+
+  arrangeDoneButton.addEventListener('click', async () => {
+    saveTileOrder(currentTileOrder());
+    setArranging(false);
+    await refreshProductsCache();
+    renderProductGrid();
+    window.App.showToast('ボタンの並びを保存しました。');
+  });
+
+  arrangeResetButton.addEventListener('click', async () => {
+    saveTileOrder(null);
+    await refreshProductsCache();
+    renderProductGrid();
+    window.App.showToast('商品コード順に戻しました。');
+  });
+
+  function tileUnderPointer(x, y) {
+    for (const el of document.elementsFromPoint(x, y)) {
+      const tile = el.closest?.('.product-tile');
+      if (tile && tile !== drag.tile && productGrid.contains(tile)) return tile;
+    }
+    return null;
+  }
+
+  productGrid.addEventListener('pointerdown', (event) => {
+    if (!arranging) return;
+    const tile = event.target.closest('.product-tile');
+    if (!tile || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    event.preventDefault();
+    drag = { tile, pointerId: event.pointerId };
+    tile.classList.add('is-dragging');
+    tile.setPointerCapture?.(event.pointerId);
+  });
+
+  productGrid.addEventListener('pointermove', (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    event.preventDefault();
+    // Auto-scroll when dragging near the top/bottom edge of the grid.
+    const box = productGrid.getBoundingClientRect();
+    if (event.clientY < box.top + 48) productGrid.scrollTop -= 12;
+    else if (event.clientY > box.bottom - 48) productGrid.scrollTop += 12;
+
+    const target = tileUnderPointer(event.clientX, event.clientY);
+    if (!target) return;
+    const r = target.getBoundingClientRect();
+    const after = event.clientX > r.left + r.width / 2;
+    const ref = after ? target.nextElementSibling : target;
+    if (ref !== drag.tile && drag.tile.nextElementSibling !== ref) productGrid.insertBefore(drag.tile, ref);
+  });
+
+  function endDrag(event) {
+    if (!drag || (event && event.pointerId !== drag.pointerId)) return;
+    drag.tile.classList.remove('is-dragging');
+    drag = null;
+  }
+  productGrid.addEventListener('pointerup', endDrag);
+  productGrid.addEventListener('pointercancel', endDrag);
 
   // ---------- Cart (receipt-style rows) ----------
 
@@ -428,7 +564,7 @@
     return `
       <div class="cart-row__line">
         <button type="button" class="cart-row__main" data-action="toggle" aria-expanded="${expanded}">
-          <span class="cart-row__name">${esc(name)}</span>
+          <span class="cart-row__name">${product?.ageRestricted ? '<span class="age-tag age-tag--sm">年齢確認</span>' : ''}${esc(name)}</span>
           <span class="cart-row__formula">${fmt(item.unitPrice)} × ${item.quantity}</span>
           <span class="cart-row__note">${stockNote(item)}</span>
         </button>
@@ -540,6 +676,7 @@
     totalCountEl.textContent = `${count}点`;
     checkoutBar.classList.toggle('is-empty', count === 0);
     refreshStockNotes();
+    cartAgeBanner.hidden = ageRestrictedNames().length === 0;
 
     const delta = total - lastTotal;
     lastTotal = total;
@@ -751,6 +888,7 @@
           unit: product ? product.unit : '',
           // Snapshot of who this line is settled to (精算先) at the time of sale.
           payee: product ? (product.payee || '').trim() : '',
+          ...(product?.ageRestricted ? { ageRestricted: true } : {}),
           unitPrice: Number(i.unitPrice) || 0,
           quantity: Number(i.quantity) || 0,
         };
@@ -766,6 +904,16 @@
       note: noteField.value.trim(),
       items: preparedItemsFrom(items),
     };
+  }
+
+  /** Names of age-restricted products currently in the cart (display only — never blocks checkout). */
+  function ageRestrictedNames() {
+    const names = [];
+    for (const item of items) {
+      const p = productMap.get(Number(item.productId));
+      if (p?.ageRestricted && !names.includes(p.name)) names.push(p.name);
+    }
+    return names;
   }
 
   function shortageNames() {
@@ -842,6 +990,12 @@
       <button type="button" class="payment-method" role="radio" data-method="${m.id}" aria-checked="${m.id === checkout.methodId}">${esc(m.label)}</button>
     `).join('');
 
+    const ageNames = ageRestrictedNames();
+    coAgeNotice.hidden = ageNames.length === 0;
+    coAgeNotice.innerHTML = ageNames.length
+      ? `<span class="age-tag">年齢確認</span><span>年齢確認が必要な商品: ${ageNames.map(esc).join('、')}</span>`
+      : '';
+
     const short = shortageNames();
     coWarning.hidden = short.length === 0;
     coWarning.textContent = short.length ? `在庫数を超えています: ${short.join('、')}(このまま会計できます)` : '';
@@ -879,7 +1033,7 @@
     coReceived.textContent = fmt(checkout.received);
     const diff = checkout.received - checkout.total;
     const enough = diff >= 0;
-    coChangeLabel.textContent = enough ? 'お釣り' : '不足';
+    coChangeLabel.textContent = enough || checkout.received === 0 ? 'お釣り' : '不足';
     coChange.textContent = checkout.received === 0 ? '-' : fmt(Math.abs(diff));
     coChange.classList.toggle('is-short', checkout.received > 0 && !enough);
     coConfirm.disabled = !enough;

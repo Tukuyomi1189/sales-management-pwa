@@ -55,6 +55,13 @@
           <label for="sale-product-search" class="sr-only">商品検索・バーコード</label>
           <input type="search" id="sale-product-search" placeholder="商品検索・バーコード" autocomplete="off" enterkeyhint="search" />
         </div>
+        <button type="button" id="tile-arrange-button" class="btn btn--ghost btn--sm register__arrange">並べ替え</button>
+      </div>
+      <!-- Arrange mode: drag product buttons into any order (saved per device, keyed by product code) -->
+      <div id="arrange-bar" class="arrange-bar" hidden>
+        <span class="arrange-bar__hint">ボタンをドラッグして好きな位置へ動かせます</span>
+        <button type="button" id="arrange-reset-button" class="btn btn--ghost btn--sm">コード順に戻す</button>
+        <button type="button" id="arrange-done-button" class="btn btn--primary btn--sm">完了</button>
       </div>
       <div id="sale-product-grid" class="product-grid"></div>
     </section>
@@ -68,6 +75,11 @@
       <div id="sale-edit-banner" class="edit-banner" hidden>
         <span id="sale-edit-label">過去の売上を編集中</span>
         <button type="button" id="sale-cancel-edit-button" class="btn btn--ghost btn--sm">編集をやめる</button>
+      </div>
+
+      <div id="cart-age-banner" class="age-banner" role="status" hidden>
+        <span class="age-tag">年齢確認</span>
+        <span>年齢確認が必要な商品が入っています</span>
       </div>
 
       <ul id="line-items-body" class="cart-list" aria-label="カートの商品"></ul>
@@ -128,6 +140,7 @@
               <strong id="checkout-change">-</strong>
             </div>
           </div>
+          <p id="checkout-age-notice" class="checkout-age" hidden></p>
           <p id="checkout-warning" class="checkout-warning" hidden></p>
         </div>
         <div id="checkout-pad" class="tender-pad">
@@ -361,6 +374,15 @@
           <span class="field-hint">合同・委託などで売上を分けるときの相手(レポートの「精算」で集計)</span>
         </div>
 
+        <div class="field field--check">
+          <span class="field-label">年齢確認</span>
+          <label class="check-label" for="field-age-restricted">
+            <input type="checkbox" id="field-age-restricted" name="ageRestricted" />
+            年齢確認が必要な商品
+          </label>
+          <span class="field-hint">レジのボタン・カート・会計画面に「年齢確認」の印が出ます</span>
+        </div>
+
         <div class="field field--required">
           <label for="field-price">単価(円) <span class="req">必須</span></label>
           <input type="number" id="field-price" name="price" min="0" step="1" inputmode="numeric" placeholder="例: 1000" required />
@@ -422,13 +444,13 @@
       <table id="product-table" class="product-table">
         <thead>
           <tr>
-            <th scope="col">商品コード</th>
-            <th scope="col">商品名</th>
-            <th scope="col">カテゴリ</th>
-            <th scope="col" class="num">単価</th>
-            <th scope="col" class="num">在庫数</th>
+            <th scope="col" data-sort-key="code"><button type="button" class="sort-btn" data-sort="code">商品コード</button></th>
+            <th scope="col" data-sort-key="name"><button type="button" class="sort-btn" data-sort="name">商品名</button></th>
+            <th scope="col" data-sort-key="category"><button type="button" class="sort-btn" data-sort="category">カテゴリ</button></th>
+            <th scope="col" class="num" data-sort-key="price"><button type="button" class="sort-btn" data-sort="price">単価</button></th>
+            <th scope="col" class="num" data-sort-key="stock"><button type="button" class="sort-btn" data-sort="stock">在庫数</button></th>
             <th scope="col">単位</th>
-            <th scope="col">更新日時</th>
+            <th scope="col" data-sort-key="updatedAt"><button type="button" class="sort-btn" data-sort="updatedAt">更新日時</button></th>
             <th scope="col" class="actions-col">操作</th>
           </tr>
         </thead>
