@@ -723,8 +723,8 @@ body:has(.view--register:not([hidden])) .app-footer {
 }
 
 .register__search {
-  flex: 0 1 260px;
-  min-width: 170px;
+  flex: 0 1 220px;
+  min-width: 150px;
 }
 
 .register__search input {
@@ -1994,4 +1994,190 @@ body:has(.view--register:not([hidden])) .app-footer {
   border-color: var(--color-primary);
   background: var(--color-primary-soft);
   color: var(--color-primary);
+}
+
+/* ---------- 年齢確認 (age-restricted products; display only) ---------- */
+.age-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: #c62828;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.age-tag--sm {
+  margin-right: 6px;
+  padding: 0 5px;
+  font-size: 0.66rem;
+  vertical-align: 1px;
+}
+
+.product-tile.is-age-restricted {
+  border-color: #c62828;
+  border-style: dashed;
+}
+
+.product-tile.is-age-restricted.is-in-cart {
+  border-style: solid;
+}
+
+.product-tile__age {
+  align-self: flex-start;
+  margin-bottom: 2px;
+}
+
+.age-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(198, 40, 40, 0.1);
+  color: #b71c1c;
+  font-size: 0.88rem;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(198, 40, 40, 0.25);
+}
+
+.checkout-age {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 2px solid #c62828;
+  border-radius: 8px;
+  background: rgba(198, 40, 40, 0.08);
+  color: #b71c1c;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+@media (prefers-color-scheme: dark) {
+  .age-banner,
+  .checkout-age {
+    color: #ff8a80;
+  }
+}
+
+.field--check .field-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.check-label input {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---------- 商品マスタ: sortable headers ---------- */
+.sort-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.num .sort-btn {
+  flex-direction: row-reverse;
+}
+
+.sort-btn::after {
+  content: "↕";
+  opacity: 0.35;
+  font-size: 0.9em;
+}
+
+.sort-btn.is-active {
+  color: var(--color-primary);
+}
+
+.sort-btn.is-active[data-dir="asc"]::after {
+  content: "▲";
+  opacity: 1;
+}
+
+.sort-btn.is-active[data-dir="desc"]::after {
+  content: "▼";
+  opacity: 1;
+}
+
+/* ---------- レジ: arrange mode (drag product buttons) ---------- */
+.register__arrange {
+  flex: 0 0 auto;
+}
+
+.arrange-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 6px 0 2px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-primary);
+}
+
+.arrange-bar__hint {
+  flex: 1 1 auto;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.product-grid.is-arranging .product-tile {
+  touch-action: none; /* the finger drags the button instead of scrolling the page */
+  cursor: grab;
+  animation: arrange-wiggle 0.35s ease-in-out infinite alternate;
+}
+
+.product-grid.is-arranging .product-tile:nth-child(2n) {
+  animation-delay: -0.17s;
+}
+
+.product-grid.is-arranging .product-tile.is-dragging {
+  animation: none;
+  cursor: grabbing;
+  transform: scale(1.06);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+  border-color: var(--color-primary);
+  z-index: 2;
+}
+
+@keyframes arrange-wiggle {
+  from { transform: rotate(-0.6deg); }
+  to { transform: rotate(0.6deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-grid.is-arranging .product-tile {
+    animation: none;
+    border-style: dashed;
+  }
 }
