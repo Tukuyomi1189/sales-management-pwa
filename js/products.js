@@ -261,7 +261,7 @@
       stock: (a, b) => dir * (effectiveStock(a) - effectiveStock(b)),
       updatedAt: (a, b) => dir * (a.updatedAt || '').localeCompare(b.updatedAt || ''),
     }[sortState.key] || (() => 0);
-    return [...products].sort((a, b) => cmp(a, b) || byName(a, b) || a.id - b.id);
+    return [...products].sort((a, b) => cmp(a, b) || byName(a, b) || String(a.id).localeCompare(String(b.id)));
   }
 
   function renderSortHeaders() {
@@ -369,7 +369,7 @@
   tableBody.addEventListener('click', (event) => {
     const btn = event.target.closest('button[data-action]');
     if (!btn) return;
-    const id = Number(btn.dataset.id);
+    const id = btn.dataset.id; // Firestore document id (string)
     const product = allProducts.find((p) => p.id === id);
     if (!product) return;
 
@@ -447,7 +447,40 @@
     importInput.value = '';
   });
 
+  // ---------- Cloud status + live updates ----------
+
+  const productsPanel = document.querySelector('[data-view-panel="products"]');
+  const cloudBanner = document.getElementById('product-cloud-banner');
+  const cloudBannerText = document.getElementById('product-cloud-banner-text');
+  const cloudBannerButton = document.getElementById('product-cloud-banner-button');
+
+  async function renderCloudBanner() {
+    if (!window.ProductDB.isCloud()) {
+      cloudBanner.hidden = false;
+      cloudBanner.classList.add('is-warning');
+      cloudBannerText.textContent = `商品のクラウド共有を使えないため、この端末の商品マスタで動作しています(${window.ProductDB.fallbackReason()})。`;
+      cloudBannerButton.hidden = true;
+      return;
+    }
+    const localOnly = await window.ProductDB.localOnlyCount();
+    cloudBanner.hidden = localOnly === 0;
+    cloudBanner.classList.remove('is-warning');
+    cloudBannerText.textContent = localOnly
+      ? `この端末には、まだクラウドに上げていない商品が${localOnly}件あります。アップロードすると同じ共有コードの端末すべてで使えます。`
+      : '';
+    cloudBannerButton.hidden = localOnly === 0;
+  }
+
+  cloudBannerButton.addEventListener('click', () => window.SettingsView?.uploadLocalProducts());
+
+  let liveTimer = null;
+  window.ProductDB.subscribe(() => {
+    if (productsPanel.hidden) return;
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(() => { refreshList(); renderCloudBanner(); }, 150);
+  });
+
   renderSortHeaders();
-  window.ProductsView = { refreshList };
-  window.Router.onViewActivate('products', refreshList);
+  window.ProductsView = { refreshList, renderCloudBanner };
+  window.Router.onViewActivate('products', () => { refreshList(); renderCloudBanner(); });
 })();

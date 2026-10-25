@@ -233,13 +233,14 @@
 <section class="view" data-view-panel="settings" hidden>
   <section class="panel">
     <h2 class="panel__title">共有コード(売上のリアルタイム同期)</h2>
-    <p class="tagline">同じ共有コードを入力した端末同士で、売上データがリアルタイムに共有されます。オフライン中に登録した売上は端末内に保存され、オンライン復帰時に自動で同期されます。共有コードはパスワードのように扱ってください。商品・顧客マスタはまだ端末ごとのローカルデータです。</p>
+    <p class="tagline">同じ共有コードを入力した端末同士で、売上と商品マスタ(在庫を含む)がリアルタイムに共有されます。オフライン中の登録・会計は端末内に保存され、オンライン復帰時に自動で同期されます。共有コードはパスワードのように扱ってください。顧客マスタと、お預かりボタン・ボタンの並びなどの設定は端末ごとです。</p>
     <div class="workspace-code-bar">
       <span class="workspace-code-bar__label">共有コード:</span>
       <strong id="workspace-code-display">------</strong>
       <button type="button" id="workspace-code-copy" class="btn btn--ghost btn--sm">コピー</button>
       <button type="button" id="workspace-code-join" class="btn btn--ghost btn--sm">別のコードに参加</button>
       <button type="button" id="workspace-migrate-button" class="btn btn--ghost btn--sm">ローカルの売上データをアップロード</button>
+      <button type="button" id="product-upload-button" class="btn btn--ghost btn--sm">この端末の商品をクラウドへアップロード</button>
     </div>
     <p class="form-message" id="workspace-message" role="status" aria-live="polite"></p>
   </section>
@@ -342,7 +343,11 @@
 
 <!-- ============ 商品マスタ ============ -->
 <section class="view" data-view-panel="products" hidden>
-  <p class="tagline">商品マスタ管理 — データはこの端末内(IndexedDB)に保存され、オフラインでも利用できます。</p>
+  <p class="tagline">商品マスタ管理 — 同じ共有コードの端末すべてで共有されます(在庫も共通)。オフラインでも利用でき、つながったときに同期されます。</p>
+  <div id="product-cloud-banner" class="cloud-banner" role="status" hidden>
+    <span id="product-cloud-banner-text"></span>
+    <button type="button" id="product-cloud-banner-button" class="btn btn--primary btn--sm" hidden>この端末の商品をクラウドへアップロード</button>
+  </div>
 
   <section class="panel" aria-labelledby="form-heading">
     <h2 id="form-heading" class="panel__title">
@@ -549,7 +554,7 @@
 </main>
 
 <footer class="app-footer">
-  <p>商品・顧客データは端末内のみに保存されます。売上データは共有コードでのリアルタイム同期のためFirebase(Google Cloud)に保存されます。</p>
+  <p>売上と商品マスタは共有コードでのリアルタイム同期のためFirebase(Google Cloud)に保存されます。顧客データは端末内のみに保存されます。</p>
 </footer>
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

@@ -63,6 +63,43 @@
     }
   });
 
+  // ---------- One-time upload of this device's old local product master to the cloud ----------
+
+  const productUploadButton = $('product-upload-button');
+  let uploading = false;
+
+  async function uploadLocalProducts() {
+    if (uploading) return;
+    const localCount = (await window.LocalProductDB.getAll()).length;
+    if (localCount === 0) {
+      window.App.showToast('この端末には、アップロードする商品がありません。');
+      return;
+    }
+    const ok = window.confirm(
+      `この端末の商品マスタ(${localCount}件)を、共有コード「${window.Cloud.getWorkspaceId()}」のクラウドへアップロードします。` +
+      '在庫数もそのまま引き継ぎます。商品コードが同じ商品がすでにクラウドにある場合は、その商品は上げません(重複防止)。続けますか?'
+    );
+    if (!ok) return;
+    uploading = true;
+    productUploadButton.disabled = true;
+    try {
+      const { added, skipped } = await window.ProductDB.uploadLocalProducts();
+      window.App.showToast(`${added}件の商品をクラウドへアップロードしました${skipped ? `(${skipped}件は商品コードが同じため省略)` : ''}。`);
+      await window.RegisterView?.reloadProducts();
+      window.ProductsView?.refreshList();
+      window.ProductsView?.renderCloudBanner();
+    } catch (err) {
+      console.error(err);
+      window.App.showToast('アップロードに失敗しました: ' + err.message, true);
+    } finally {
+      uploading = false;
+      productUploadButton.disabled = false;
+    }
+  }
+
+  productUploadButton.addEventListener('click', uploadLocalProducts);
+  window.SettingsView = { uploadLocalProducts };
+
   // ---------- お預かりボタンの金額 (per device; stored by js/register.js) ----------
 
   const tenderForm = $('tender-settings-form');

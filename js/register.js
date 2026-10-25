@@ -128,7 +128,7 @@
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   let productsCache = [];
-  let productMap = new Map(); // id -> product, O(1) lookups on every tap
+  let productMap = new Map(); // id (string) -> product, O(1) lookups on every tap
   let productByCode = new Map(); // code -> product, for shared stock (stockSourceCode)
   let categoryColor = new Map();
   let activeCategory = ''; // '' = すべて
@@ -143,10 +143,13 @@
   let wakeLock = null;
 
   const fmt = (n) => window.App.formatCurrency(n);
+  /** Product ids are Firestore document id strings; old sales may still carry numbers (12 ≡ "12"). */
+  const pid = (id) => (id == null || id === '' ? '' : String(id));
+  const productById = (id) => productMap.get(pid(id));
   const esc = (s) => window.App.escapeHtml(s);
 
   function makeItem(productId, unitPrice, quantity) {
-    return { key: nextItemKey++, productId, unitPrice, quantity };
+    return { key: nextItemKey++, productId: pid(productId), unitPrice, quantity };
   }
 
   /** Accepts full-width digits (IME on) and strips anything else; null when there is no digit at all. */
@@ -196,7 +199,7 @@
     if (!ac !== !bc) return ac ? -1 : 1; // products with a code first
     return ac.localeCompare(bc, 'ja', { numeric: true }) ||
       (a.name || '').localeCompare(b.name || '', 'ja', { numeric: true }) ||
-      a.id - b.id;
+      String(a.id).localeCompare(String(b.id));
   }
 
   // ---------- Button order (並べ替え) ----------
@@ -233,9 +236,12 @@
     });
   }
 
+  let localOnlyCount = 0; // products still only in this device's old local master (cloud empty)
+
   async function refreshProductsCache() {
     productsCache = sortForRegister(await window.ProductDB.getAll());
-    productMap = new Map(productsCache.map((p) => [p.id, p]));
+    localOnlyCount = productsCache.length ? 0 : await window.ProductDB.localOnlyCount();
+    productMap = new Map(productsCache.map((p) => [pid(p.id), p]));
     productByCode = new Map();
     for (const p of productsCache) {
       const code = (p.code || '').trim();
@@ -272,7 +278,7 @@
   function cartQuantityForOwner(owner) {
     let qty = 0;
     for (const i of items) {
-      if (stockOwner(productMap.get(Number(i.productId)))?.id === owner.id) qty += Number(i.quantity) || 0;
+      if (stockOwner(productById(i.productId))?.id === owner.id) qty += Number(i.quantity) || 0;
     }
     return qty;
   }
@@ -312,7 +318,8 @@
 
   function cartQuantityOf(productId) {
     let qty = 0;
-    for (const i of items) if (i.productId === productId) qty += Number(i.quantity) || 0;
+    const want = pid(productId);
+    for (const i of items) if (i.productId === want) qty += Number(i.quantity) || 0;
     return qty;
   }
 
@@ -337,7 +344,7 @@
     const color = categoryColor.get((p.category || '').trim());
     const stockText = soldOut ? '在庫切れ' : `残り ${esc(owner.stock)}${esc(owner.unit || p.unit) || ''}`;
     return `
-      <button type="button" class="product-tile ${qty ? 'is-in-cart' : ''} ${soldOut ? 'is-sold-out' : ''} ${free ? 'is-free' : ''} ${age ? 'is-age-restricted' : ''}" data-product-id="${p.id}"${color ? ` style="--cat:${color}"` : ''}>
+      <button type="button" class="product-tile ${qty ? 'is-in-cart' : ''} ${soldOut ? 'is-sold-out' : ''} ${free ? 'is-free' : ''} ${age ? 'is-age-restricted' : ''}" data-product-id="${esc(p.id)}"${color ? ` style="--cat:${color}"` : ''}>
         ${qty ? `<span class="product-tile__cart-badge">${qty}</span>` : ''}
         ${age ? '<span class="age-tag product-tile__age">年齢確認</span>' : ''}
         <span class="product-tile__name">${esc(p.name)}</span>
@@ -350,7 +357,9 @@
   /** Full rebuild — only needed when the product master itself changes. */
   function renderProductGrid() {
     if (productsCache.length === 0) {
-      productGrid.innerHTML = '<p class="empty-state">商品が登録されていません。「商品マスタ」タブから登録してください。</p>';
+      productGrid.innerHTML = localOnlyCount
+        ? `<div class="empty-state cloud-upload-hint"><p>この端末には、まだクラウドに上げていない商品が${localOnlyCount}件あります。アップロードすると、同じ共有コードの端末すべてで使えるようになります。</p><button type="button" class="btn btn--primary" data-action="upload-local-products">この端末の商品をクラウドへアップロード</button></div>`
+        : '<p class="empty-state">商品が登録されていません。「商品マスタ」タブから登録してください。</p>';
       return;
     }
     productGrid.innerHTML = productsCache.map(tileHtml).join('') +
@@ -363,7 +372,7 @@
     const q = productSearchInput.value.trim().toLowerCase();
     let shown = 0;
     for (const tile of productGrid.querySelectorAll('.product-tile')) {
-      const product = productMap.get(Number(tile.dataset.productId));
+      const product = productById(tile.dataset.productId);
       const visible = !!product && productMatches(product, q);
       tile.hidden = !visible;
       if (visible) shown++;
@@ -374,7 +383,7 @@
 
   /** Patch one button's "in cart" badge instead of re-rendering the whole grid. */
   function updateTileBadge(productId, { pop = false } = {}) {
-    const tile = productGrid.querySelector(`.product-tile[data-product-id="${productId}"]`);
+    const tile = productGrid.querySelector(`.product-tile[data-product-id="${CSS.escape(pid(productId))}"]`);
     if (!tile) return;
     const qty = cartQuantityOf(productId);
     tile.classList.toggle('is-in-cart', qty > 0);
@@ -394,8 +403,9 @@
     }
   }
 
-  function addProductToCart(productId) {
-    const product = productMap.get(productId);
+  function addProductToCart(rawId) {
+    const productId = pid(rawId);
+    const product = productById(productId);
     if (!product) return;
     clearFormError();
     const existing = items.find((i) => i.productId === productId);
@@ -416,9 +426,13 @@
   }
 
   productGrid.addEventListener('click', (event) => {
+    if (event.target.closest('[data-action="upload-local-products"]')) {
+      window.SettingsView?.uploadLocalProducts();
+      return;
+    }
     const tile = event.target.closest('.product-tile');
     if (!tile || arranging) return; // while arranging, taps/drags never add to the cart
-    addProductToCart(Number(tile.dataset.productId));
+    addProductToCart(tile.dataset.productId);
   });
 
   productSearchInput.addEventListener('input', applyProductFilter);
@@ -433,7 +447,7 @@
     if (!q) return;
     const exact = productsCache.find((p) => (p.code || '').trim().toLowerCase() === q);
     const visible = [...productGrid.querySelectorAll('.product-tile:not([hidden])')];
-    const target = exact || (visible.length === 1 ? productMap.get(Number(visible[0].dataset.productId)) : null);
+    const target = exact || (visible.length === 1 ? productById(visible[0].dataset.productId) : null);
     if (target) {
       addProductToCart(target.id);
       productSearchInput.value = '';
@@ -466,7 +480,7 @@
 
   function currentTileOrder() {
     return [...productGrid.querySelectorAll('.product-tile')]
-      .map((t) => productMap.get(Number(t.dataset.productId)))
+      .map((t) => productById(t.dataset.productId))
       .filter(Boolean)
       .map(tileKey);
   }
@@ -533,11 +547,11 @@
   // ---------- Cart (receipt-style rows) ----------
 
   function stockNote(item) {
-    const owner = stockOwner(productMap.get(item.productId));
+    const owner = stockOwner(productById(item.productId));
     if (!owner) return '';
     // Shared stock: e.g. 新刊 ×2 + 新刊(無償) ×1 together must fit in 新刊's stock.
     if (cartQuantityForOwner(owner) > Number(owner.stock)) {
-      return `<span class="cart-row__warn">在庫不足(残り${esc(owner.stock)}${owner.id !== item.productId ? '・共通' : ''})</span>`;
+      return `<span class="cart-row__warn">在庫不足(残り${esc(owner.stock)}${pid(owner.id) !== pid(item.productId) ? '・共通' : ''})</span>`;
     }
     return '';
   }
@@ -558,7 +572,7 @@
   }
 
   function rowHtml(item) {
-    const product = productMap.get(item.productId);
+    const product = productById(item.productId);
     const name = product ? product.name : '(削除された商品)';
     const expanded = expandedKey === item.key;
     return `
@@ -857,7 +871,7 @@
 
   function startEdit(sale) {
     setEditing(sale);
-    items = sale.items.map((i) => makeItem(i.productId || '', i.unitPrice, i.quantity));
+    items = sale.items.map((i) => makeItem(pid(i.productId), i.unitPrice, i.quantity));
     customerField.value = sale.customerId ? String(sale.customerId) : '';
     noteField.value = sale.note || '';
     extraDetails.open = !!(sale.customerId || sale.note);
@@ -881,9 +895,9 @@
     return list
       .filter((i) => i.productId && Number(i.quantity) > 0)
       .map((i) => {
-        const product = productMap.get(Number(i.productId));
+        const product = productById(i.productId);
         return {
-          productId: Number(i.productId),
+          productId: pid(i.productId),
           productName: product ? product.name : '(削除された商品)',
           unit: product ? product.unit : '',
           // Snapshot of who this line is settled to (精算先) at the time of sale.
@@ -910,7 +924,7 @@
   function ageRestrictedNames() {
     const names = [];
     for (const item of items) {
-      const p = productMap.get(Number(item.productId));
+      const p = productById(item.productId);
       if (p?.ageRestricted && !names.includes(p.name)) names.push(p.name);
     }
     return names;
@@ -919,7 +933,7 @@
   function shortageNames() {
     const owners = new Map();
     for (const item of items) {
-      const owner = stockOwner(productMap.get(Number(item.productId)));
+      const owner = stockOwner(productById(item.productId));
       if (owner && cartQuantityForOwner(owner) > Number(owner.stock)) owners.set(owner.id, owner.name);
     }
     return [...owners.values()];
@@ -1203,6 +1217,20 @@
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && location.hash.replace('#', '') in { '': 1, sales: 1 }) requestWakeLock();
   });
+
+  // ---------- Live product updates (other devices' edits and stock changes) ----------
+
+  const registerPanel = document.querySelector('[data-view-panel="sales"]');
+  let productReloadTimer = null;
+  function scheduleProductReload() {
+    if (registerPanel.hidden) return; // activate() reloads when the register is opened
+    clearTimeout(productReloadTimer);
+    productReloadTimer = setTimeout(() => {
+      if (arranging) return; // 「完了」 reloads anyway; don't shuffle buttons under a dragging finger
+      reloadProducts();
+    }, 150);
+  }
+  window.ProductDB.subscribe(scheduleProductReload);
 
   // ---------- Activation ----------
 
