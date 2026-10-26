@@ -29,6 +29,26 @@
    * ADDS the amount to the received total, so 500 twice = ¥1,000.
    */
   const TENDER_AMOUNTS_KEY = 'sales-management-tender-amounts';
+  // Per device: whether the product buttons show 「残り N個」 (off = hide it from customers).
+  const SHOW_STOCK_KEY = 'sales-management-show-stock';
+
+  function getShowStock() {
+    try {
+      return localStorage.getItem(SHOW_STOCK_KEY) !== 'off';
+    } catch {
+      return true;
+    }
+  }
+
+  function setShowStock(show) {
+    try {
+      if (show) localStorage.removeItem(SHOW_STOCK_KEY);
+      else localStorage.setItem(SHOW_STOCK_KEY, 'off');
+    } catch { /* storage unavailable: keep the default */ }
+    renderProductGrid();
+    renderCart();
+    return getShowStock();
+  }
   const DEFAULT_TENDER_AMOUNTS = [1000, 5000, 10000];
   const MAX_TENDER_AMOUNTS = 8;
 
@@ -341,18 +361,23 @@
     const shared = owner !== p;
     const stock = Number(owner.stock);
     const soldOut = stock <= 0;
-    const low = !soldOut && stock <= LOW_STOCK;
+    const showStock = getShowStock();
+    const low = showStock && !soldOut && stock <= LOW_STOCK;
     const free = Number(p.price) === 0;
     const age = !!p.ageRestricted;
     const color = categoryColor.get((p.category || '').trim());
-    const stockText = soldOut ? '在庫切れ' : `残り ${esc(owner.stock)}${esc(owner.unit || p.unit) || ''}`;
+    // 在庫切れ stays visible even when the count is hidden (the staff still need to know).
+    const stockText = soldOut ? '在庫切れ' : (showStock ? `残り ${esc(owner.stock)}${esc(owner.unit || p.unit) || ''}` : '');
+    const stockLine = stockText || shared
+      ? `<span class="product-tile__stock ${low || soldOut ? 'stock-hint--low' : ''}">${stockText}${shared ? '<span class="shared-tag" title="' + esc(owner.name) + ' と在庫を共有">共通</span>' : ''}</span>`
+      : '';
     return `
       <button type="button" class="product-tile ${qty ? 'is-in-cart' : ''} ${soldOut ? 'is-sold-out' : ''} ${free ? 'is-free' : ''} ${age ? 'is-age-restricted' : ''}" data-product-id="${esc(p.id)}"${color ? ` style="--cat:${color}"` : ''}>
         ${qty ? `<span class="product-tile__cart-badge">${qty}</span>` : ''}
         ${age ? '<span class="age-tag product-tile__age">年齢確認</span>' : ''}
         <span class="product-tile__name">${esc(p.name)}</span>
         <span class="product-tile__price">${free ? '<span class="free-tag">無償</span>' : fmt(p.price)}</span>
-        <span class="product-tile__stock ${low || soldOut ? 'stock-hint--low' : ''}">${stockText}${shared ? '<span class="shared-tag" title="' + esc(owner.name) + ' と在庫を共有">共通</span>' : ''}</span>
+        ${stockLine}
       </button>
     `;
   }
@@ -554,6 +579,7 @@
     if (!owner) return '';
     // Shared stock: e.g. 新刊 ×2 + 新刊(無償) ×1 together must fit in 新刊's stock.
     if (cartQuantityForOwner(owner) > Number(owner.stock)) {
+      if (!getShowStock()) return '<span class="cart-row__warn">在庫不足</span>';
       return `<span class="cart-row__warn">在庫不足(残り${esc(owner.stock)}${pid(owner.id) !== pid(item.productId) ? '・共通' : ''})</span>`;
     }
     return '';
@@ -1284,6 +1310,8 @@
     setTenderAmounts,
     parseTenderAmounts,
     defaultTenderAmounts: () => [...DEFAULT_TENDER_AMOUNTS],
+    getShowStock,
+    setShowStock,
     reloadProducts,
     refreshCustomerOptions,
     isEditing: (id) => editing?.id === id,
