@@ -1152,6 +1152,12 @@
       if (!doneStep.hidden) finishCheckout();
       return;
     }
+    // Phones show the dialog full screen, so there is no backdrop: an empty-space tap on the
+    // done screen (not on the text or buttons) does the same as 「次のお客様」.
+    if (!doneStep.hidden && window.App?.isPhone?.() && (event.target === dialog || event.target === doneStep)) {
+      finishCheckout();
+      return;
+    }
     const action = event.target.closest('[data-checkout]')?.dataset.checkout;
     if (action === 'back') closeCheckout();
     else if (action === 'confirm') confirmCheckout();
