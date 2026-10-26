@@ -253,6 +253,15 @@
 
   <section class="panel" aria-labelledby="register-settings-heading">
     <h2 id="register-settings-heading" class="panel__title">レジの設定(この端末)</h2>
+    <div class="field field--check show-stock-setting">
+      <span class="field-label">在庫数の表示</span>
+      <label class="check-label" for="show-stock-input">
+        <input type="checkbox" id="show-stock-input" />
+        レジの商品ボタンに在庫数(「残り 30個」など)を表示する
+      </label>
+      <span class="field-hint">お客様に在庫数を見せたくないときはオフにします。オフでも「在庫切れ」は表示されます。この端末だけの設定です。</span>
+      <span id="show-stock-message" class="form-message" role="status" aria-live="polite"></span>
+    </div>
     <form id="tender-settings-form" class="tender-settings" novalidate>
       <div class="field">
         <label for="tender-amounts-input">お預かりボタンの金額</label>

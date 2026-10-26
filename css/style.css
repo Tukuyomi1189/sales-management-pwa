@@ -1954,6 +1954,12 @@ body:has(.view--register:not([hidden])) .app-footer {
 }
 
 /* 設定 → お預かりボタンの金額 */
+.show-stock-setting {
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
 .tender-settings {
   display: grid;
   gap: 14px;

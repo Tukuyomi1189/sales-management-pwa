@@ -151,8 +151,21 @@
     showTenderMessage('初期値に戻しました。');
   });
 
+  // ---------- 在庫数の表示 (per device; stored by js/register.js) ----------
+
+  const showStockInput = $('show-stock-input');
+  const showStockMessage = $('show-stock-message');
+
+  showStockInput.addEventListener('change', () => {
+    const on = window.RegisterView.setShowStock(showStockInput.checked);
+    showStockInput.checked = on;
+    showStockMessage.textContent = on ? '在庫数を表示します。' : '在庫数を隠しました(「在庫切れ」は表示されます)。';
+  });
+
   window.Router.onViewActivate('settings', () => {
     renderWorkspaceCode();
     loadTenderSettings();
+    showStockInput.checked = window.RegisterView.getShowStock();
+    showStockMessage.textContent = '';
   });
 })();

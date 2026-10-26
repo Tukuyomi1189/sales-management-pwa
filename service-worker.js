@@ -1,6 +1,6 @@
 /* Service worker: caches the app shell so the app works fully offline. */
 
-const CACHE_VERSION = 'v19';
+const CACHE_VERSION = 'v20';
 const CACHE_NAME = `sales-management-shell-${CACHE_VERSION}`;
 
 // Must match the SDK_VERSION constant in js/firebase-init.js. Each of these 3
@@ -79,6 +79,12 @@ self.addEventListener('fetch', (event) => {
 
   // Only handle GET requests to same-origin or explicitly allow-listed origins; let everything else pass through.
   if (request.method !== 'GET' || !isCacheableOrigin) {
+    return;
+  }
+
+  // docs/ (操作マニュアルのPDFなど) is not part of the app: always go to the network, so opening
+  // the PDF link shows the PDF instead of the app shell, and the large file is never cached.
+  if (requestOrigin === self.location.origin && new URL(request.url).pathname.includes('/docs/')) {
     return;
   }
 
