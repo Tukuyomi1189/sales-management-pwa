@@ -17,6 +17,21 @@
   const payeeOptions = document.getElementById('payee-options');
   const ageField = document.getElementById('field-age-restricted');
   const sortButtons = document.querySelectorAll('#product-table .sort-btn');
+  const sortSelect = document.getElementById('product-sort-select');
+  const formPanel = document.getElementById('product-form-panel');
+  const addButton = document.getElementById('product-add-button');
+  const formCloseButton = document.getElementById('product-form-close');
+
+  // Phones: the list comes first; the registration form opens on demand (CSS ignores
+  // .is-collapsed on wider screens, where the form is always shown).
+  function setFormOpen(open) {
+    formPanel.classList.toggle('is-collapsed', !open);
+    addButton.hidden = open;
+    if (open && window.App.isPhone()) formPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  setFormOpen(false);
+  addButton.addEventListener('click', () => { setFormOpen(true); nameField.focus({ preventScroll: true }); });
+  formCloseButton.addEventListener('click', () => { resetForm(); setFormOpen(false); });
   const stockSourceHint = document.getElementById('field-stock-source-hint');
   const stockReq = document.getElementById('field-stock-req');
 
@@ -124,6 +139,7 @@
     ageField.checked = !!product.ageRestricted;
     renderStockSourceOptions(sourceCodeOf(product));
 
+    setFormOpen(true);
     formModeLabel.textContent = `商品を編集中: ${product.name}`;
     submitButton.textContent = '更新する';
     cancelEditButton.hidden = false;
@@ -199,6 +215,7 @@
         window.App.showToast('商品を登録しました。');
       }
       resetForm();
+      if (window.App.isPhone()) setFormOpen(false);
       await refreshList();
     } catch (err) {
       console.error(err);
@@ -264,7 +281,24 @@
     return [...products].sort((a, b) => cmp(a, b) || byName(a, b) || String(a.id).localeCompare(String(b.id)));
   }
 
+  function syncSortSelect() {
+    const value = `${sortState.key}:${sortState.dir}`;
+    if (![...sortSelect.options].some((o) => o.value === value)) {
+      sortSelect.insertAdjacentHTML('beforeend', `<option value="${value}">${value}</option>`);
+    }
+    sortSelect.value = value;
+  }
+
+  sortSelect.addEventListener('change', () => {
+    const [key, dir] = sortSelect.value.split(':');
+    sortState = { key, dir };
+    try { localStorage.setItem(SORT_KEY, JSON.stringify(sortState)); } catch { /* ignore */ }
+    renderSortHeaders();
+    renderTable(filterProducts(allProducts, searchInput.value));
+  });
+
   function renderSortHeaders() {
+    syncSortSelect();
     for (const btn of sortButtons) {
       const active = btn.dataset.sort === sortState.key;
       btn.classList.toggle('is-active', active);
@@ -315,14 +349,14 @@
         : `<span class="stock-badge ${isLow ? 'stock-badge--low' : ''}">${esc(p.stock)}</span>`;
 
       tr.innerHTML = `
-        <td>${window.App.escapeHtml(p.code) || '-'}</td>
-        <td class="name-cell">${p.ageRestricted ? '<span class="age-tag age-tag--sm">年齢確認</span>' : ''}${esc(p.name)}${p.payee ? `<span class="payment-detail">精算先: ${esc(p.payee)}</span>` : ''}</td>
-        <td>${window.App.escapeHtml(p.category) || '-'}</td>
-        <td class="num">${window.App.formatCurrency(p.price)}</td>
-        <td class="num">${stockCell}</td>
-        <td>${window.App.escapeHtml(p.unit) || '-'}</td>
-        <td>${window.App.formatDateTime(p.updatedAt)}</td>
-        <td class="actions-col">
+        <td class="p-code">${window.App.escapeHtml(p.code) || '-'}</td>
+        <td class="name-cell p-name">${p.ageRestricted ? '<span class="age-tag age-tag--sm">年齢確認</span>' : ''}${esc(p.name)}${p.payee ? `<span class="payment-detail">精算先: ${esc(p.payee)}</span>` : ''}</td>
+        <td class="p-category">${window.App.escapeHtml(p.category) || '-'}</td>
+        <td class="num p-price">${window.App.formatCurrency(p.price)}</td>
+        <td class="num p-stock">${stockCell}</td>
+        <td class="p-unit">${window.App.escapeHtml(p.unit) || '-'}</td>
+        <td class="p-updated">${window.App.formatDateTime(p.updatedAt)}</td>
+        <td class="actions-col p-actions">
           <div class="row-actions">
             <button type="button" class="btn btn--ghost btn--sm" data-action="edit" data-id="${p.id}">編集</button>
             <button type="button" class="btn btn--danger btn--sm" data-action="delete" data-id="${p.id}">削除</button>
@@ -387,7 +421,7 @@
   });
 
   form.addEventListener('submit', handleSubmit);
-  cancelEditButton.addEventListener('click', resetForm);
+  cancelEditButton.addEventListener('click', () => { resetForm(); if (window.App.isPhone()) setFormOpen(false); });
 
   function exportJSON() {
     if (allProducts.length === 0) {
