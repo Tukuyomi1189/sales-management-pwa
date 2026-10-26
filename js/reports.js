@@ -259,7 +259,8 @@
     const map = new Map();
     for (const s of filtered) {
       for (const item of s.items) {
-        const key = item.productId || item.productName;
+        // Old sales carry numeric ids, new ones strings (12 ≡ "12") — normalise before grouping.
+        const key = item.productId != null && item.productId !== '' ? `id:${item.productId}` : `name:${item.productName}`;
         const prev = map.get(key) || { name: item.productName, amount: 0, qty: 0 };
         prev.amount += Number(item.unitPrice) * Number(item.quantity);
         prev.qty += Number(item.quantity) || 0;

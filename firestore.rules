@@ -9,5 +9,9 @@ service cloud.firestore {
     match /workspaces/{workspaceId}/sales/{saleId} {
       allow read, write: if request.auth != null;
     }
+    // Product master (incl. stock), shared by every device with the same workspace code.
+    match /workspaces/{workspaceId}/products/{productId} {
+      allow read, write: if request.auth != null;
+    }
   }
 }

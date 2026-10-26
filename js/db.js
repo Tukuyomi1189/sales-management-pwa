@@ -141,33 +141,12 @@ function createCrud(storeName) {
   };
 }
 
-const ProductDB = {
-  ...createCrud(STORE_PRODUCTS),
-
-  /** First product whose code matches exactly (uses the `code` index). */
-  async findByCode(code) {
-    const clean = String(code || '').trim();
-    if (!clean) return undefined;
-    const matches = await withStore(STORE_PRODUCTS, 'readonly', (store) => requestToPromise(store.index('code').getAll(clean)));
-    return matches[0];
-  },
-
-  /**
-   * The product whose stock this product actually uses. Products with `stockSourceCode`
-   * (e.g. 「新刊（無償）」) share the stock of the product with that code; everything else
-   * uses its own. Linked by product CODE rather than id because ids are re-assigned on
-   * JSON import (moving products to another device) while codes stay the same. If the
-   * source can't be found the product falls back to its own stock.
-   */
-  async getStockOwner(id) {
-    const product = await ProductDB.get(id);
-    if (!product) return undefined;
-    const code = String(product.stockSourceCode || '').trim();
-    if (!code) return product;
-    const source = await ProductDB.findByCode(code);
-    return source && source.id !== product.id ? source : product;
-  },
-};
+/**
+ * The pre-cloud product master in this device's IndexedDB. Since products moved to
+ * Firestore (see ProductDB below) it is only read for the one-time upload to the cloud
+ * ("この端末の商品をクラウドへアップロード") and as a fallback when the cloud can't be used.
+ */
+const LocalProductDB = createCrud(STORE_PRODUCTS);
 const CustomerDB = createCrud(STORE_CUSTOMERS);
 
 // ---------- Sales: line-item transactions that also adjust product stock ----------
@@ -182,18 +161,14 @@ function localDateString(d) {
 
 /**
  * Apply `sign` * quantity to each item's product stock (sign = -1 on sale, +1 on revert).
- * Runs against the local IndexedDB product store via ProductDB — Firestore (where sales
- * live now, see below) can't share a transaction with IndexedDB, so this is a best-effort
- * follow-up write rather than an atomic part of the sale write.
+ * Products live in Firestore, and stock moves with an atomic `increment`, so two devices
+ * selling the same product at the same time both count (no lost updates). Shared-stock
+ * products (stockSourceCode) move the stock of their source product.
  */
 async function adjustStockLocally(items, sign) {
   for (const item of items) {
-    if (!item.productId) continue;
-    // Shared-stock products (stockSourceCode) move the stock of their source product.
-    const owner = await ProductDB.getStockOwner(item.productId);
-    if (!owner) continue;
-    const nextStock = (Number(owner.stock) || 0) + sign * Number(item.quantity);
-    await ProductDB.update(owner.id, { stock: nextStock });
+    if (item.productId == null || item.productId === '') continue;
+    await ProductDB.adjustStock(item.productId, sign * Number(item.quantity));
   }
 }
 
@@ -367,7 +342,279 @@ const LegacyLocalSalesDB = {
   },
 };
 
+// ---------- Products (cloud-synced): workspaces/{workspaceId}/products ----------
+
+/**
+ * Product master shared by every device using the same workspace code.
+ *
+ * - A live onSnapshot subscription keeps all products in memory, so reads never wait on
+ *   the network (Firestore's persistent cache also serves them offline) and changes made
+ *   on another device — including stock moving after its sales — appear right away.
+ * - Writes update that in-memory copy immediately and sync in the background (same
+ *   reasoning as SalesDB: Firestore write promises only resolve on server ack).
+ * - Stock changes use Firestore `increment`, so concurrent sales on two devices add up.
+ * - Ids are Firestore document id strings. Products uploaded from the old local master
+ *   keep their old numeric id as the document id ("12"), so existing sales that point at
+ *   productId 12 still resolve. Always compare ids as strings.
+ * - If the cloud can't be used (Firestore rules not deployed yet → permission-denied, or
+ *   the SDK failed to load) it falls back to this device's IndexedDB master and says so,
+ *   so the register keeps working instead of showing no products.
+ */
+const ProductDB = (() => {
+  let mode = 'cloud'; // 'cloud' | 'local'
+  let products = new Map(); // id (string) -> product
+  let ready = null;
+  let fallbackReason = '';
+  const listeners = new Set();
+
+  const sid = (id) => String(id);
+  const copy = (p) => (p ? { ...p } : undefined);
+  const nowIso = () => new Date().toISOString();
+  const stripId = ({ id, ...rest }) => rest;
+
+  async function productsCollection() {
+    const { firestore, fs } = await window.Cloud.ready;
+    return fs.collection(firestore, 'workspaces', window.Cloud.getWorkspaceId(), 'products');
+  }
+
+  function notify() {
+    for (const fn of listeners) {
+      try { fn(); } catch (err) { console.error(err); }
+    }
+  }
+
+  async function loadLocal() {
+    const local = await LocalProductDB.getAll();
+    products = new Map(local.map((p) => [sid(p.id), { ...p, id: sid(p.id) }]));
+  }
+
+  async function fallBackToLocal(err) {
+    if (mode === 'local') return;
+    mode = 'local';
+    const denied = err && (err.code === 'permission-denied' || /permission/i.test(err.message || ''));
+    fallbackReason = denied
+      ? 'Firestoreのルールで商品の共有が許可されていません(ルール未反映)'
+      : `クラウドに接続できません(${err && err.message ? err.message : '不明なエラー'})`;
+    console.warn('ProductDB: falling back to the local product master —', fallbackReason);
+    await loadLocal();
+    window.App?.showToast(`商品のクラウド共有を使えないため、この端末の商品マスタで動作しています: ${fallbackReason}`, true);
+  }
+
+  function start() {
+    if (ready) return ready;
+    ready = new Promise((resolve) => {
+      let settled = false;
+      const settle = () => { if (!settled) { settled = true; resolve(); } };
+      (async () => {
+        try {
+          const { fs } = await window.Cloud.ready;
+          const col = await productsCollection();
+          fs.onSnapshot(col, (snap) => {
+            if (mode !== 'cloud') return;
+            products = new Map(snap.docs.map((d) => [d.id, { ...d.data(), id: d.id }]));
+            settle();
+            notify();
+          }, async (err) => {
+            console.error('ProductDB subscribe error:', err);
+            await fallBackToLocal(err);
+            settle();
+            notify();
+          });
+        } catch (err) {
+          await fallBackToLocal(err);
+          settle();
+          notify();
+        }
+      })();
+    });
+    return ready;
+  }
+
+  function sorted() {
+    return [...products.values()].map(copy)
+      .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+  }
+
+  function findByCodeSync(code) {
+    const clean = String(code || '').trim();
+    if (!clean) return undefined;
+    // Deterministic if two products somehow share a code: oldest first.
+    return [...products.values()]
+      .filter((p) => String(p.code || '').trim() === clean)
+      .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || '') || a.id.localeCompare(b.id))[0];
+  }
+
+  function stockOwnerSync(id) {
+    const product = products.get(sid(id));
+    if (!product) return undefined;
+    const code = String(product.stockSourceCode || '').trim();
+    if (!code) return product;
+    const source = findByCodeSync(code);
+    return source && source.id !== product.id ? source : product;
+  }
+
+  async function cloudWrite(label, fn) {
+    const { fs } = await window.Cloud.ready;
+    const col = await productsCollection();
+    syncInBackground(fn(fs, col), label);
+  }
+
+  const api = {
+    /** Resolves once the first product list is available (cloud snapshot or local fallback). */
+    ready: start,
+
+    async getAll() {
+      await start();
+      return sorted();
+    },
+
+    async get(id) {
+      await start();
+      return copy(products.get(sid(id)));
+    },
+
+    async findByCode(code) {
+      await start();
+      return copy(findByCodeSync(code));
+    },
+
+    /**
+     * The product whose stock this product actually uses. Products with `stockSourceCode`
+     * (e.g. 「新刊（無償）」) share the stock of the product with that code; everything else
+     * uses its own. Linked by product CODE (stable across devices / JSON import). If the
+     * source can't be found the product falls back to its own stock.
+     */
+    async getStockOwner(id) {
+      await start();
+      return copy(stockOwnerSync(id));
+    },
+
+    async add(record) {
+      await start();
+      const now = nowIso();
+      const data = { ...stripId(record), createdAt: record.createdAt || now, updatedAt: now };
+      if (mode === 'local') {
+        const id = await LocalProductDB.add(data);
+        await loadLocal();
+        notify();
+        return sid(id);
+      }
+      const { fs } = await window.Cloud.ready;
+      const ref = fs.doc(await productsCollection());
+      products.set(ref.id, { ...data, id: ref.id });
+      syncInBackground(fs.setDoc(ref, data), '商品の登録');
+      notify();
+      return ref.id;
+    },
+
+    async update(id, changes) {
+      await start();
+      const key = sid(id);
+      const existing = products.get(key);
+      if (!existing) throw new Error(`Product ${key} not found`);
+      const patch = { ...stripId(changes), updatedAt: nowIso() };
+      if (mode === 'local') {
+        const updated = await LocalProductDB.update(Number(key), patch);
+        await loadLocal();
+        notify();
+        return copy({ ...updated, id: key });
+      }
+      products.set(key, { ...existing, ...patch, id: key });
+      await cloudWrite('商品の更新', (fs, col) => fs.updateDoc(fs.doc(col, key), patch));
+      notify();
+      return copy(products.get(key));
+    },
+
+    async remove(id) {
+      await start();
+      const key = sid(id);
+      if (mode === 'local') {
+        await LocalProductDB.remove(Number(key));
+        await loadLocal();
+        notify();
+        return;
+      }
+      products.delete(key);
+      await cloudWrite('商品の削除', (fs, col) => fs.deleteDoc(fs.doc(col, key)));
+      notify();
+    },
+
+    async bulkAdd(records) {
+      for (const r of records) await api.add(r);
+    },
+
+    async clear() {
+      await start();
+      for (const id of [...products.keys()]) await api.remove(id);
+    },
+
+    /** Move stock by `delta` on the product that owns this product's stock (see getStockOwner). */
+    async adjustStock(productId, delta) {
+      await start();
+      const owner = stockOwnerSync(productId);
+      if (!owner || !Number.isFinite(delta) || delta === 0) return;
+      if (mode === 'local') {
+        await LocalProductDB.update(Number(owner.id), { stock: (Number(owner.stock) || 0) + delta });
+        await loadLocal();
+        notify();
+        return;
+      }
+      const updatedAt = nowIso();
+      products.set(owner.id, { ...owner, stock: (Number(owner.stock) || 0) + delta, updatedAt });
+      await cloudWrite('在庫の更新', (fs, col) => fs.updateDoc(fs.doc(col, owner.id), { stock: fs.increment(delta), updatedAt }));
+      notify();
+    },
+
+    /** Call `fn` whenever the product list changes (this device or any other). Returns an unsubscribe fn. */
+    subscribe(fn) {
+      listeners.add(fn);
+      start();
+      return () => listeners.delete(fn);
+    },
+
+    isCloud: () => mode === 'cloud',
+    fallbackReason: () => fallbackReason,
+
+    /** How many products this device still has only in its old local master (cloud is empty). */
+    async localOnlyCount() {
+      await start();
+      if (mode !== 'cloud' || products.size > 0) return 0;
+      return (await LocalProductDB.getAll()).length;
+    },
+
+    /**
+     * One-time move of this device's old local product master into the shared cloud master.
+     * Products whose code already exists in the cloud are skipped (so two devices uploading
+     * don't create duplicates). The old numeric id is kept as the document id so existing
+     * sales still point at the right product (unless that id is already taken in the cloud).
+     */
+    async uploadLocalProducts() {
+      await start();
+      if (mode !== 'cloud') throw new Error(fallbackReason || 'クラウドに接続できません');
+      const local = await LocalProductDB.getAll();
+      const { fs } = await window.Cloud.ready;
+      const col = await productsCollection();
+      let added = 0;
+      let skipped = 0;
+      for (const p of local) {
+        const code = String(p.code || '').trim();
+        if (code && findByCodeSync(code)) { skipped++; continue; }
+        const wantedId = sid(p.id);
+        const ref = products.has(wantedId) ? fs.doc(col) : fs.doc(col, wantedId);
+        const data = { ...stripId(p), stock: Number(p.stock) || 0, updatedAt: nowIso() };
+        products.set(ref.id, { ...data, id: ref.id });
+        syncInBackground(fs.setDoc(ref, data), '商品のアップロード');
+        added++;
+      }
+      notify();
+      return { added, skipped, total: local.length };
+    },
+  };
+  return api;
+})();
+
 window.ProductDB = ProductDB;
+window.LocalProductDB = LocalProductDB;
 window.CustomerDB = CustomerDB;
 window.SalesDB = SalesDB;
 window.LegacyLocalSalesDB = LegacyLocalSalesDB;

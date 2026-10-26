@@ -287,7 +287,7 @@
             items: item.items
               .filter((i) => i && i.productName)
               .map((i) => ({
-                productId: i.productId != null ? Number(i.productId) : null,
+                productId: i.productId != null && i.productId !== '' ? String(i.productId) : null,
                 productName: String(i.productName),
                 unit: i.unit || '',
                 payee: typeof i.payee === 'string' ? i.payee : '',

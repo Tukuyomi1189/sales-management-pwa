@@ -37,13 +37,13 @@
 
   async function aggregate(sales) {
     const products = await window.ProductDB.getAll();
-    const byId = new Map(products.map((p) => [p.id, p]));
+    const byId = new Map(products.map((p) => [String(p.id), p]));
     const byName = new Map(products.map((p) => [p.name, p]));
 
     const rows = new Map();
     for (const sale of sales) {
       for (const item of sale.items || []) {
-        const product = byId.get(Number(item.productId)) || byName.get(item.productName);
+        const product = (item.productId != null && item.productId !== '' ? byId.get(String(item.productId)) : undefined) || byName.get(item.productName);
         const payee = (item.payee || '').trim() || (product?.payee || '').trim() || UNASSIGNED;
         const key = lineKey(item);
         // Same product can end up under two payees (payee changed mid-period) — keep them apart.
