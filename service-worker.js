@@ -82,6 +82,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // docs/ (操作マニュアルのPDFなど) is not part of the app: always go to the network, so opening
+  // the PDF link shows the PDF instead of the app shell, and the large file is never cached.
+  if (requestOrigin === self.location.origin && new URL(request.url).pathname.includes('/docs/')) {
+    return;
+  }
+
   // Navigations: serve the app shell from THIS version's cache so the HTML always matches
   // the cached JS/CSS. (Serving fresh HTML from the network next to cached scripts is what
   // produced half-updated screens.) The browser still checks service-worker.js on every

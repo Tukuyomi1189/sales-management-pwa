@@ -9,6 +9,8 @@ Progressive Web App (PWA) として動作する、オフライン環境でも使
 
 公開URL: https://tukuyomi1189.github.io/sales-management-pwa/
 
+操作マニュアル(PDF・画像入り): [docs/操作マニュアル.pdf](docs/操作マニュアル.pdf)(公開URL: https://tukuyomi1189.github.io/sales-management-pwa/docs/操作マニュアル.pdf )
+
 ## 主な機能
 
 ### レジ(売上入力)
