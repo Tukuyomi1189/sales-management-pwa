@@ -95,6 +95,9 @@
   const arrangeResetButton = $('arrange-reset-button');
   const arrangeDoneButton = $('arrange-done-button');
   const cartAgeBanner = $('cart-age-banner');
+  const cartPanel = document.querySelector('.register__cart');
+  const cartToggleButton = $('cart-toggle-button');
+  const cartSheetBackdrop = $('cart-sheet-backdrop');
   const productSearchInput = $('sale-product-search');
   const productGrid = $('sale-product-grid');
 
@@ -813,6 +816,32 @@
     });
   });
 
+  // ---------- Phone: the cart is a bottom sheet (collapsed = only the total bar) ----------
+
+  function setCartSheet(open) {
+    const on = !!open && window.App.isPhone();
+    cartPanel.classList.toggle('is-sheet-open', on);
+    cartSheetBackdrop.hidden = !on;
+    document.body.classList.toggle('is-cart-sheet-open', on);
+    cartToggleButton.setAttribute('aria-expanded', String(on));
+    cartToggleButton.textContent = on ? '閉じる' : '明細';
+  }
+
+  // Keep the product grid's bottom padding equal to the collapsed sheet's height (it grows
+  // when e.g. the 年齢確認 notice is shown), so the last buttons never hide behind it.
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(() => {
+      if (!cartPanel.classList.contains('is-sheet-open')) {
+        document.documentElement.style.setProperty('--cart-bar-h', `${cartPanel.offsetHeight}px`);
+      }
+    }).observe(cartPanel);
+  }
+
+  cartToggleButton.addEventListener('click', () => setCartSheet(!cartPanel.classList.contains('is-sheet-open')));
+  cartSheetBackdrop.addEventListener('click', () => setCartSheet(false));
+  window.addEventListener('hashchange', () => setCartSheet(false));
+  window.matchMedia('(max-width: 759px)').addEventListener?.('change', () => setCartSheet(false));
+
   // ---------- Customer / memo (collapsed by default) ----------
 
   function updateExtraSummary() {
@@ -994,6 +1023,7 @@
   }
 
   function openCheckout() {
+    setCartSheet(false);
     const { total, count } = cartTotals();
     checkout = { methodId: PAYMENT_METHODS[0].id, received: 0, total, count, savedId: null, snapshot: null };
 

@@ -69,7 +69,7 @@
     }, action ? 6000 : 2600);
   }
 
-  window.App = { formatCurrency, formatDateTime, escapeHtml, showToast };
+  window.App = { formatCurrency, formatDateTime, escapeHtml, showToast, isPhone: () => window.matchMedia('(max-width: 759px)').matches };
 
   // ---------- Connection status ----------
 
@@ -158,11 +158,29 @@
   const appHeader = document.querySelector('.app-header');
   const tabNav = document.querySelector('.tab-nav');
 
+  // Phones (< 760px): the tab bar sits at the bottom of the screen (see style.css), so it
+  // doesn't count toward the top chrome; its height is exposed separately as --bottom-nav-h.
+  const phoneQuery = window.matchMedia('(max-width: 759px)');
+
   function updateChromeHeight() {
     const banner = updateBanner.hidden ? 0 : updateBanner.offsetHeight;
-    const h = appHeader.offsetHeight + tabNav.offsetHeight + banner;
+    const navAtBottom = getComputedStyle(tabNav).position === 'fixed';
+    const h = appHeader.offsetHeight + (navAtBottom ? 0 : tabNav.offsetHeight) + banner;
     document.documentElement.style.setProperty('--chrome-h', `${h}px`);
+    document.documentElement.style.setProperty('--bottom-nav-h', navAtBottom ? `${tabNav.offsetHeight}px` : '0px');
   }
+
+  phoneQuery.addEventListener?.('change', updateChromeHeight);
+
+  // 「…その他」 on phones: shows the toolbar's secondary actions (JSON import/export etc.).
+  document.addEventListener('click', (event) => {
+    const more = event.target.closest('.toolbar__more');
+    if (!more) return;
+    const toolbar = more.closest('.toolbar');
+    const open = !toolbar.classList.contains('is-more-open');
+    toolbar.classList.toggle('is-more-open', open);
+    more.setAttribute('aria-expanded', String(open));
+  });
 
   if ('ResizeObserver' in window) {
     const ro = new ResizeObserver(updateChromeHeight);

@@ -63,16 +63,16 @@
       tr.dataset.id = s.id;
       applyHighlight(tr);
       tr.innerHTML = `
-        <td class="checkbox-col">
+        <td class="checkbox-col h-check">
           <input type="checkbox" class="sale-row-checkbox" data-id="${s.id}" aria-label="この売上を選択" ${selectedIds.has(s.id) ? 'checked' : ''} />
         </td>
-        <td>${window.App.formatDateTime(s.createdAt)}${s.pending ? ' <span class="sync-pill" title="この端末には保存済み。オンライン時にクラウドへ自動同期されます">同期待ち</span>' : ''}</td>
-        <td>${esc(s.customerName) || '一般客'}</td>
-        <td class="name-cell">${itemsSummaryHtml(s)}${s.note ? `<span class="payment-detail">メモ: ${esc(s.note)}</span>` : ''}</td>
-        <td class="num">${fmt(s.totalAmount)}</td>
-        <td>${paymentHtml(s)}</td>
-        <td>${window.App.formatDateTime(s.updatedAt)}</td>
-        <td class="actions-col">
+        <td class="h-date">${window.App.formatDateTime(s.createdAt)}${s.pending ? ' <span class="sync-pill" title="この端末には保存済み。オンライン時にクラウドへ自動同期されます">同期待ち</span>' : ''}</td>
+        <td class="h-customer">${esc(s.customerName) || '一般客'}</td>
+        <td class="name-cell h-items">${itemsSummaryHtml(s)}${s.note ? `<span class="payment-detail">メモ: ${esc(s.note)}</span>` : ''}</td>
+        <td class="num h-total">${fmt(s.totalAmount)}</td>
+        <td class="h-payment">${paymentHtml(s)}</td>
+        <td class="h-updated">${window.App.formatDateTime(s.updatedAt)}</td>
+        <td class="actions-col h-actions">
           <div class="row-actions">
             <button type="button" class="btn btn--ghost btn--sm" data-action="edit" data-id="${s.id}">編集</button>
             <button type="button" class="btn btn--danger btn--sm" data-action="delete" data-id="${s.id}">削除</button>
