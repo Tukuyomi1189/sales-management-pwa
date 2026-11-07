@@ -2220,6 +2220,40 @@ body:has(.view--register:not([hidden])) .app-footer {
   max-width: 440px;
 }
 
+/* 開始時の在庫 (商品マスタ) */
+.start-stock-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg);
+}
+
+.start-stock-bar__text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 0.9rem;
+}
+
+.start-stock-bar__label {
+  font-weight: 700;
+}
+
+#start-stock-status {
+  color: var(--color-text-muted);
+}
+
+.p-start__label {
+  display: none;
+}
+
 /* ======================================================================
    Phones (< 760px). iPad / PC layouts above are unchanged.
    ====================================================================== */
@@ -2616,6 +2650,7 @@ body:has(.view--register:not([hidden])) .app-footer {
     grid-template-areas:
       "name price"
       "code stock"
+      ". start"
       "actions actions";
     gap: 4px 10px;
     align-items: center;
@@ -2634,6 +2669,8 @@ body:has(.view--register:not([hidden])) .app-footer {
   #product-table .p-price { grid-area: price; font-weight: 800; font-size: 1.05rem; }
   #product-table .p-code { grid-area: code; font-size: 0.78rem; color: var(--color-text-muted); }
   #product-table .p-stock { grid-area: stock; }
+  #product-table .p-start { grid-area: start; font-size: 0.8rem; color: var(--color-text-muted); text-align: right; }
+  #product-table .p-start__label { display: inline; }
   #product-table .p-category,
   #product-table .p-unit,
   #product-table .p-updated { display: none; }

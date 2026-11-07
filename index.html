@@ -463,6 +463,14 @@
       <div class="summary" id="summary-stats" aria-live="polite"></div>
     </div>
 
+    <div class="start-stock-bar">
+      <div class="start-stock-bar__text">
+        <span class="start-stock-bar__label">開始時の在庫</span>
+        <span id="start-stock-status">未記録</span>
+      </div>
+      <button type="button" id="start-stock-button" class="btn btn--ghost btn--sm">開始時の在庫を記録</button>
+    </div>
+
     <div class="toolbar">
       <div class="field field--search">
         <label for="search-input" class="sr-only">検索</label>
@@ -487,6 +495,7 @@
             <th scope="col" data-sort-key="category"><button type="button" class="sort-btn" data-sort="category">カテゴリ</button></th>
             <th scope="col" class="num" data-sort-key="price"><button type="button" class="sort-btn" data-sort="price">単価</button></th>
             <th scope="col" class="num" data-sort-key="stock"><button type="button" class="sort-btn" data-sort="stock">在庫数</button></th>
+            <th scope="col" class="num">開始時在庫</th>
             <th scope="col">単位</th>
             <th scope="col" data-sort-key="updatedAt"><button type="button" class="sort-btn" data-sort="updatedAt">更新日時</button></th>
             <th scope="col" class="actions-col">操作</th>

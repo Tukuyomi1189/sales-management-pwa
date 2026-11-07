@@ -565,6 +565,44 @@ const ProductDB = (() => {
       notify();
     },
 
+    /**
+     * Record every product's current stock as its 開始時の在庫 (startStock + startStockAt),
+     * e.g. right before an event opens. Pressing it again overwrites the previous record.
+     * Shared-stock products (stockSourceCode) have no stock of their own and are skipped;
+     * their source product is recorded. `updatedAt` is left alone: this is not an edit.
+     */
+    async recordStartStock() {
+      await start();
+      const at = nowIso();
+      const owners = [...products.values()].filter((p) => {
+        const code = String(p.stockSourceCode || '').trim();
+        return !code || !findByCodeSync(code);
+      });
+      if (mode === 'local') {
+        for (const p of owners) await LocalProductDB.update(Number(p.id), { startStock: Number(p.stock) || 0, startStockAt: at });
+        await loadLocal();
+        notify();
+        return { count: owners.length, at };
+      }
+      const { fs } = await window.Cloud.ready;
+      const col = await productsCollection();
+      const writes = owners.map((p) => {
+        const startStock = Number(p.stock) || 0;
+        products.set(p.id, { ...p, startStock, startStockAt: at });
+        return fs.updateDoc(fs.doc(col, p.id), { startStock, startStockAt: at });
+      });
+      if (writes.length) syncInBackground(Promise.all(writes), '開始時の在庫の記録');
+      notify();
+      return { count: owners.length, at };
+    },
+
+    /** When 開始時の在庫 was last recorded (ISO string), or '' if never. */
+    lastStartStockAt() {
+      let latest = '';
+      for (const p of products.values()) if (p.startStockAt && p.startStockAt > latest) latest = p.startStockAt;
+      return latest;
+    },
+
     /** Call `fn` whenever the product list changes (this device or any other). Returns an unsubscribe fn. */
     subscribe(fn) {
       listeners.add(fn);
