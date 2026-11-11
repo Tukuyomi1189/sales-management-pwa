@@ -2245,34 +2245,143 @@ body:has(.view--register:not([hidden])) .app-footer {
   max-width: 440px;
 }
 
-/* 開始時の在庫 (商品マスタ) */
-.start-stock-bar {
+/* ---------- イベント ---------- */
+.event-panel__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.event-panel__text .panel__title {
+  margin-bottom: 4px;
+}
+
+.event-panel__status {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.event-panel__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.event-panel__hint {
+  margin: 10px 0 0;
+}
+
+.event-panel__note {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(214, 140, 0, 0.12);
+  color: #a86200;
+  font-size: 0.85rem;
+}
+
+.event-pill {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.event-pill--inline {
+  margin: 0;
+  padding: 1px 8px;
+  font-size: 0.75rem;
+}
+
+.event-dialog {
+  width: min(460px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+}
+
+.event-dialog::backdrop {
+  background: rgba(15, 18, 25, 0.55);
+}
+
+.event-form {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+}
+
+.event-form__title {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.event-form__dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.event-form .field input {
+  width: 100%;
+  min-width: 0;
+  font-size: 16px; /* no zoom on iOS */
+}
+
+.event-form .field-hint,
+.event-form .form-message {
+  margin: 0;
+}
+
+.event-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.report-event {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px 12px;
-  margin-bottom: 12px;
+  margin-top: 12px;
   padding: 10px 14px;
-  border: 1px solid var(--color-border);
   border-radius: 10px;
   background: var(--color-bg);
 }
 
-.start-stock-bar__text {
+.report-event__text {
+  margin: 0;
+}
+
+.report-event__actions {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-  font-size: 0.9rem;
+  gap: 8px;
 }
 
-.start-stock-bar__label {
-  font-weight: 700;
+.report-event__add {
+  margin-top: 12px;
 }
 
-#start-stock-status {
+.reconcile-table {
+  min-width: 0;
+}
+
+.reconcile-ok {
   color: var(--color-text-muted);
+}
+
+.reconcile-diff {
+  color: var(--color-danger);
+  font-weight: 800;
 }
 
 .p-start__label {
@@ -2700,6 +2809,20 @@ body:has(.view--register:not([hidden])) .app-footer {
   #product-table .p-unit,
   #product-table .p-updated { display: none; }
   #product-table .p-actions { grid-area: actions; }
+
+  /* ---- イベント ---- */
+  .event-panel__actions,
+  .event-panel__actions .btn {
+    width: 100%;
+  }
+  .event-panel__actions .btn {
+    min-height: 48px;
+  }
+  .reconcile-table th,
+  .reconcile-table td {
+    padding: 8px 6px;
+    font-size: 0.85rem;
+  }
 
   /* ---- レポート: compact ---- */
   .stat-tiles {

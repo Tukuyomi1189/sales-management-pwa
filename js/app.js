@@ -91,11 +91,16 @@
   const syncStatus = document.getElementById('sync-status');
   const syncStatusText = document.getElementById('sync-status-text');
 
+  let pendingSales = 0;
+
   function updateSyncStatus(sales) {
     const pending = sales.filter((s) => s.pending).length;
+    pendingSales = pending;
     syncStatus.hidden = pending === 0;
     syncStatusText.textContent = `未同期 ${pending}件`;
   }
+
+  window.App.pendingSalesCount = () => pendingSales;
 
   syncStatus.addEventListener('click', () => {
     location.hash = 'history';

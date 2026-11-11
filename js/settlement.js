@@ -85,7 +85,8 @@
   }
 
   function periodText() {
-    const { from, to } = period;
+    const { from, to, label } = period;
+    if (label) return label;
     if (!from && !to) return '集計期間: 全期間';
     return `集計期間: ${from || '最初'} 〜 ${to || '最新'}`;
   }

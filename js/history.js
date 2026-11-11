@@ -282,6 +282,7 @@
           const sale = {
             ...(typeof item.id === 'string' && item.id.trim() && !item.id.includes('/') ? { id: item.id.trim() } : {}),
             date: typeof item.date === 'string' ? item.date : '',
+            ...(typeof item.eventId === 'string' && item.eventId ? { eventId: item.eventId } : {}),
             customerId: item.customerId != null ? Number(item.customerId) : null,
             customerName: item.customerName || '',
             note: item.note || '',
