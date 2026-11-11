@@ -280,6 +280,7 @@
         .filter((item) => item && typeof item === 'object' && Array.isArray(item.items) && item.items.length > 0)
         .map((item) => {
           const sale = {
+            ...(typeof item.id === 'string' && item.id.trim() && !item.id.includes('/') ? { id: item.id.trim() } : {}),
             date: typeof item.date === 'string' ? item.date : '',
             customerId: item.customerId != null ? Number(item.customerId) : null,
             customerName: item.customerName || '',
@@ -306,8 +307,11 @@
 
       if (cleaned.length === 0) throw new Error('インポート可能な売上データが見つかりませんでした。');
 
+      const existingIds = new Set(allSales.map((s) => s.id));
+      const overwritten = cleaned.filter((s) => s.id && existingIds.has(s.id)).length;
+      const added = cleaned.length - overwritten;
       await window.SalesDB.bulkImport(cleaned);
-      window.App.showToast(`${cleaned.length}件の売上をインポートしました(在庫数は変更されません)。`);
+      window.App.showToast(`売上をインポートしました: 追加 ${added}件 / 上書き ${overwritten}件(在庫数は変更されません)。`);
     } catch (err) {
       console.error(err);
       window.App.showToast('インポートに失敗しました: ' + err.message, true);
