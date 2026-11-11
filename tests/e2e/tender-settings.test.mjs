@@ -19,6 +19,18 @@ await runTest('tender-settings', async (t) => {
   t.eq('default buttons', await quick(), ['ちょうど', '+￥1,000', '+￥5,000', '+￥10,000']);
   await page.locator('[data-checkout="back"]').tap();
 
+  // Typing right after tapping the tab must survive the hashchange that arrives a moment later
+  // (it used to re-run the screen's setup and put the saved amounts back).
+  const kept = await page.evaluate(async () => {
+    document.querySelector('.tab-nav__btn[data-view="settings"]').click();
+    const input = document.getElementById('tender-amounts-input');
+    input.value = '777';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 100)); // let the hashchange event fire
+    return input.value;
+  });
+  t.eq('typing right after switching tabs is not wiped', kept, '777');
+  await page.locator('.tab-nav__btn[data-view="sales"]').tap();
   await page.locator('.tab-nav__btn[data-view="settings"]').tap();
   t.eq('settings shows the defaults', await page.inputValue('#tender-amounts-input'), '1000, 5000, 10000');
   await page.fill('#tender-amounts-input', '１０００、300 ￥500, 300');

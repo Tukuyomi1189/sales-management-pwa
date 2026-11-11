@@ -9,6 +9,7 @@
   const KNOWN_VIEWS = new Set([...PANELS].map((p) => p.dataset.viewPanel));
 
   const activateListeners = {};
+  let renderedView = null;
 
   function onViewActivate(view, fn) {
     (activateListeners[view] ||= []).push(fn);
@@ -21,6 +22,7 @@
 
   function render() {
     const view = currentView();
+    renderedView = view;
 
     PANELS.forEach((panel) => {
       panel.hidden = panel.dataset.viewPanel !== view;
@@ -44,8 +46,8 @@
       // Update the hash for back/forward + deep-linking, but don't rely solely on the
       // 'hashchange' event to reflect it — rapid clicks across tabs can update
       // location.hash faster than the browser dispatches/coalesces that event, which
-      // left the UI showing a stale view. Rendering synchronously here is idempotent
-      // (hashchange firing afterward just re-renders the same, already-current view).
+      // left the UI showing a stale view. The hashchange that follows sees the view is
+      // already rendered and does nothing.
       if (currentView() !== btn.dataset.view) {
         location.hash = btn.dataset.view;
       }
@@ -53,7 +55,12 @@
     });
   });
 
-  window.addEventListener('hashchange', render);
+  // A tab tap renders right away and then the browser reports the hash change a moment later.
+  // Rendering the same view again would re-run its activate handlers — e.g. 設定 reloading
+  // its inputs and wiping what was typed in between — so only render when the view changed.
+  window.addEventListener('hashchange', () => {
+    if (currentView() !== renderedView) render();
+  });
 
   window.Router = { onViewActivate, render };
 })();
