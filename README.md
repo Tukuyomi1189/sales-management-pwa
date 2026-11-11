@@ -189,6 +189,7 @@ node run.mjs data-integrity       # 名前に一致するものだけ実行
 
 - **GitHub での自動実行**: プルリクエストを作る・更新するたびに `.github/workflows/test.yml` が全テストを実行し、結果がプルリクエストに表示されます(master へのマージ後にも実行)。失敗したときはスクリーンショットなどを「Artifacts」から取得できます
 - **`static/service-worker.check.mjs`**(ブラウザなし): 画面が読み込むファイルがすべて `PRECACHE_URLS` に入っているか、Firebase SDK のバージョンが `js/firebase-init.js` と一致しているか、アプリのファイルを変えたのに `CACHE_VERSION` を上げ忘れていないか(プルリクエストのときだけ。`BASE_REF=master node static/service-worker.check.mjs` で手元でも確認できる)
+- **`unit/workspace-code.test.mjs`**(ブラウザなし): 共有コードの生成(暗号用乱数・8文字)と、参加できるコードの条件
 - **`e2e/*.test.mjs`**(画面操作):
 
 | ファイル | 確認していること |
@@ -204,6 +205,7 @@ node run.mjs data-integrity       # 名前に一致するものだけ実行
 | `phone-layout` | スマホの画面(下のタブ・明細シート・全画面のお会計・…その他) |
 | `data-integrity` | 商品編集で在庫が戻らない・バックアップの二重読み込み・編集後のお預かり/お釣り |
 | `service-worker` | 本物の service worker でのオフライン起動と会計、マニュアルPDFが開けること |
+| `sync-and-tidy` | 「未同期 ◯件」の表示、会計で商品の更新日時が変わらないこと、旧ローカル売上のアップロード、manifest |
 
 古いコードに対してテストを動かすときは `APP_ROOT=/path/to/old/copy node e2e/data-integrity.test.mjs` のように指定します(不具合を直す前に、テストがその不具合を捉えているかの確認に使える)。
 
