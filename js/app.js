@@ -83,6 +83,24 @@
   window.addEventListener('online', updateConnectionStatus);
   window.addEventListener('offline', updateConnectionStatus);
 
+  // ---------- 未同期 ◯件 (always visible while any sale waits for the cloud) ----------
+  // Sales are saved on this device first and sent in the background, so after an offline
+  // stretch some may exist only here. Showing the count on every screen lets staff check,
+  // before closing, that every device is back to zero.
+
+  const syncStatus = document.getElementById('sync-status');
+  const syncStatusText = document.getElementById('sync-status-text');
+
+  function updateSyncStatus(sales) {
+    const pending = sales.filter((s) => s.pending).length;
+    syncStatus.hidden = pending === 0;
+    syncStatusText.textContent = `未同期 ${pending}件`;
+  }
+
+  syncStatus.addEventListener('click', () => {
+    location.hash = 'history';
+  });
+
   // ---------- PWA install prompt ----------
 
   let deferredInstallPrompt = null;
@@ -193,6 +211,7 @@
     updateConnectionStatus();
     registerServiceWorker();
     window.Router.render();
+    window.SalesDB.subscribe(updateSyncStatus);
   }
 
   init();

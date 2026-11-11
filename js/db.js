@@ -1,4 +1,11 @@
-/* IndexedDB wrapper for all offline-first data: products, customers, sales. */
+/*
+ * Data layer.
+ * - Sales (SalesDB) and products incl. stock (ProductDB): Firestore, shared by every device
+ *   with the same workspace code; Firestore's persistent cache keeps them working offline.
+ * - Customers (CustomerDB): this device's IndexedDB only.
+ * - LocalProductDB / LegacyLocalSalesDB: the pre-cloud IndexedDB stores, kept for the one-time
+ *   upload to the cloud and as ProductDB's fallback when the cloud can't be used.
+ */
 
 const DB_NAME = 'sales-management-db';
 const DB_VERSION = 2;
@@ -173,10 +180,8 @@ async function adjustStockLocally(items, sign) {
 }
 
 /**
- * Sales (cloud-synced pilot): stored in Firestore under
- * workspaces/{workspaceId}/sales so multiple devices sharing the same
- * workspace code see the same data in real time. Product/customer master
- * data is unaffected — it still lives only in local IndexedDB.
+ * Sales: stored in Firestore under workspaces/{workspaceId}/sales so multiple
+ * devices sharing the same workspace code see the same data in real time.
  *
  * IDs are Firestore document ID strings (not the auto-increment numbers
  * IndexedDB used), and the registration moment (local time) is always used
@@ -591,9 +596,10 @@ const ProductDB = (() => {
         notify();
         return;
       }
-      const updatedAt = nowIso();
-      products.set(owner.id, { ...owner, stock: (Number(owner.stock) || 0) + delta, updatedAt });
-      await cloudWrite('在庫の更新', (fs, col) => fs.updateDoc(fs.doc(col, owner.id), { stock: fs.increment(delta), updatedAt }));
+      // `updatedAt` means "the product was edited": a sale moving stock is not an edit, and
+      // bumping it reshuffled the product list (newest first) on every sale.
+      products.set(owner.id, { ...owner, stock: (Number(owner.stock) || 0) + delta });
+      await cloudWrite('在庫の更新', (fs, col) => fs.updateDoc(fs.doc(col, owner.id), { stock: fs.increment(delta) }));
       notify();
     },
 

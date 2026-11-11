@@ -212,9 +212,8 @@
   }
 
   /**
-   * ProductDB.getAll() orders by updatedAt, and every sale bumps the sold products'
-   * updatedAt (stock change) — which made buttons jump around after each sale. The
-   * register uses a fixed order instead (product code, then name) so buttons stay put.
+   * The register uses a fixed order (product code, then name) so buttons stay put,
+   * instead of ProductDB.getAll()'s newest-edited-first order.
    */
   function pickerOrder(a, b) {
     const ac = a.code || '';

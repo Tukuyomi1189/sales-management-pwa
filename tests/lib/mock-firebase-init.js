@@ -2,14 +2,22 @@
 // "Server" state lives in localStorage so several pages (= devices) of the same test
 // context share it; other pages are notified through the `storage` event.
 // Supports collections by path, auto ids, increment(), hasPendingWrites with a slow
-// (or never, when offline) server ack, and permission-denied per collection.
+// (or never, when offline) server ack that survives a reload, and permission-denied per collection.
 (() => {
   const SERVER_DELAY = window.__SERVER_DELAY ?? 1500; // Infinity = never acked (offline)
   const DENY = new Set(window.__DENY_COLLECTIONS || []); // e.g. ['products'] = rules not deployed
   const KEY = 'mockfs:server';
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } };
   const save = (st) => localStorage.setItem(KEY, JSON.stringify(st));
-  const pending = new Set(); // `${path}/${id}` written by THIS page and not yet acked
+  // `${path}/${id}` written by THIS page and not yet acked. Kept in sessionStorage (per tab,
+  // survives reload) like Firestore's persistent cache keeps unsent writes across restarts.
+  const PENDING_KEY = 'mockfs:pending';
+  const pending = new Set((() => { try { return JSON.parse(sessionStorage.getItem(PENDING_KEY) || '[]'); } catch { return []; } })());
+  const savePending = () => { try { sessionStorage.setItem(PENDING_KEY, JSON.stringify([...pending])); } catch { /* ignore */ } };
+  // Back online after a reload: unsent writes from before are acked like any other write.
+  if (pending.size && SERVER_DELAY !== Infinity) {
+    setTimeout(() => { pending.clear(); savePending(); notify(null); }, SERVER_DELAY);
+  }
   const listeners = new Set(); // { path, cb }
   let seq = 0;
   const lastCol = (path) => path.split('/').pop();
@@ -27,10 +35,10 @@
     if (denied(path)) return Promise.reject(permErr());
     const st = load(); st[path] = st[path] || {};
     fn(st[path]); save(st);
-    pending.add(`${path}/${id}`); notify(path);
+    pending.add(`${path}/${id}`); savePending(); notify(path);
     return new Promise((res) => {
       if (SERVER_DELAY === Infinity) return;
-      setTimeout(() => { pending.delete(`${path}/${id}`); notify(path); res(); }, SERVER_DELAY);
+      setTimeout(() => { pending.delete(`${path}/${id}`); savePending(); notify(path); res(); }, SERVER_DELAY);
     });
   };
   const applyPatch = (doc, patch) => {

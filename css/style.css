@@ -178,6 +178,31 @@ body {
   color: var(--color-danger);
 }
 
+/* 未同期 ◯件: sales saved on this device that the cloud has not acknowledged yet */
+.status-pill--pending {
+  appearance: none;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+  background: rgba(214, 140, 0, 0.14);
+  color: #a86200;
+}
+
+@media (prefers-color-scheme: dark) {
+  .status-pill--pending {
+    background: rgba(240, 170, 40, 0.18);
+    color: #f2b544;
+  }
+}
+
+.app-header__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* Tab navigation */
 .tab-nav {
   display: flex;
