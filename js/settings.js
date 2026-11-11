@@ -31,10 +31,13 @@
 
   workspaceCodeJoinButton.addEventListener('click', () => {
     const input = window.prompt('参加する共有コードを入力してください(他の端末に表示されているコード):', '');
-    if (input == null) return;
-    const clean = input.trim();
-    if (!clean) return;
-    window.Cloud.setWorkspaceId(clean);
+    if (input == null || !input.trim()) return;
+    try {
+      window.Cloud.setWorkspaceId(input);
+    } catch (err) {
+      showWorkspaceMessage(err.message, true);
+      return;
+    }
     showWorkspaceMessage('共有コードを変更しました。反映のためページを再読み込みします…');
     setTimeout(() => location.reload(), 800);
   });
@@ -53,7 +56,9 @@
         showWorkspaceMessage('アップロード対象のローカル売上データはありませんでした。');
         return;
       }
-      await window.SalesDB.bulkImport(localSales);
+      // Their ids are this device's IndexedDB numbers (1, 2, 3…), which other devices also
+      // use: drop them so each upload gets new ids instead of overwriting another device's.
+      await window.SalesDB.bulkImport(localSales.map(({ id, ...rest }) => rest));
       showWorkspaceMessage(`${localSales.length}件のローカル売上データをアップロードしました。`);
     } catch (err) {
       console.error(err);

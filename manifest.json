@@ -1,13 +1,12 @@
 {
   "name": "売上管理ツール",
   "short_name": "売上管理",
-  "description": "オフラインで動作する売上管理ツール(商品マスタ管理)",
+  "description": "同人誌イベントなどの頒布で使えるPOSレジ風の売上管理ツール(オフライン対応・複数端末で共有)",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#f5f6f8",
   "theme_color": "#2f6fed",
-  "orientation": "portrait-primary",
   "lang": "ja",
   "icons": [
     {

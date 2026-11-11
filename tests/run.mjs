@@ -9,6 +9,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const filter = process.argv[2] || '';
 const files = [
   path.join(here, 'static', 'service-worker.check.mjs'),
+  ...fs.readdirSync(path.join(here, 'unit')).filter((f) => f.endsWith('.test.mjs')).sort().map((f) => path.join(here, 'unit', f)),
   ...fs.readdirSync(path.join(here, 'e2e')).filter((f) => f.endsWith('.test.mjs')).sort().map((f) => path.join(here, 'e2e', f)),
 ].filter((f) => path.basename(f).includes(filter));
 
