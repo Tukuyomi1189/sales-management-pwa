@@ -93,8 +93,10 @@ await runTest('data-integrity', async (t) => {
   const salesSum = () => B.evaluate(async () => { const all = await window.SalesDB.getAll(); return [all.length, all.reduce((s, x) => s + x.totalAmount, 0)]; });
   const salesBefore = await salesSum();
   fs.writeFileSync(`${OUT_DIR}/integrity-sales.json`, JSON.stringify(salesBackup));
+  dialogs.length = 0;
   for (let i = 0; i < 2; i++) { await B.setInputFiles('#sale-import-input', `${OUT_DIR}/integrity-sales.json`); await B.waitForTimeout(600); }
   t.eq('2a: sales count / total unchanged after importing twice', await salesSum(), salesBefore);
+  t.match('2a: confirm before overwriting sales', dialogs[0] || '', new RegExp(`^売上をインポートします: 追加 0件 / 上書き ${salesBackup.length}件\\n同じ売上は、ファイルの内容で上書きされます`));
   t.eq('2a: toast reports overwritten', await B.textContent('#toast'), `売上をインポートしました: 追加 0件 / 上書き ${salesBackup.length}件(在庫数は変更されません)。`);
   fs.writeFileSync(`${OUT_DIR}/integrity-sales-noid.json`, JSON.stringify(salesBackup.map(({ id, ...x }) => x).slice(0, 1)));
   await B.setInputFiles('#sale-import-input', `${OUT_DIR}/integrity-sales-noid.json`);

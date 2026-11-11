@@ -2,7 +2,6 @@
  * Data layer.
  * - Sales (SalesDB) and products incl. stock (ProductDB): Firestore, shared by every device
  *   with the same workspace code; Firestore's persistent cache keeps them working offline.
- * - Customers (CustomerDB): this device's IndexedDB only.
  * - LocalProductDB / LegacyLocalSalesDB: the pre-cloud IndexedDB stores, kept for the one-time
  *   upload to the cloud and as ProductDB's fallback when the cloud can't be used.
  */
@@ -10,6 +9,7 @@
 const DB_NAME = 'sales-management-db';
 const DB_VERSION = 2;
 const STORE_PRODUCTS = 'products';
+// The 顧客 feature was removed; its store is kept so existing IndexedDB data stays untouched.
 const STORE_CUSTOMERS = 'customers';
 const STORE_SALES = 'sales';
 
@@ -97,7 +97,7 @@ function withStore(storeName, mode, callback) {
   return withStores([storeName], mode, (stores) => callback(stores[storeName]));
 }
 
-/** Generic CRUD factory shared by simple master-data stores (products, customers). */
+/** Generic CRUD factory for the local IndexedDB stores. */
 function createCrud(storeName) {
   return {
     add(record) {
@@ -154,7 +154,6 @@ function createCrud(storeName) {
  * ("この端末の商品をクラウドへアップロード") and as a fallback when the cloud can't be used.
  */
 const LocalProductDB = createCrud(STORE_PRODUCTS);
-const CustomerDB = createCrud(STORE_CUSTOMERS);
 
 // ---------- Sales: line-item transactions that also adjust product stock ----------
 
@@ -241,7 +240,7 @@ const SalesDB = {
     return docRef.id;
   },
 
-  /** Editing a sale never changes its original date/time — only the line items, customer, or note. */
+  /** Editing a sale never changes its original date/time — only the line items or the note. */
   async update(id, changes) {
     const { fs } = await window.Cloud.ready;
     const col = await salesCollection();
@@ -934,6 +933,5 @@ const EventDB = (() => {
 window.EventDB = EventDB;
 window.ProductDB = ProductDB;
 window.LocalProductDB = LocalProductDB;
-window.CustomerDB = CustomerDB;
 window.SalesDB = SalesDB;
 window.LegacyLocalSalesDB = LegacyLocalSalesDB;

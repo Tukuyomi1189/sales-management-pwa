@@ -377,8 +377,8 @@
         <td class="p-updated">${window.App.formatDateTime(p.updatedAt)}</td>
         <td class="actions-col p-actions">
           <div class="row-actions">
-            <button type="button" class="btn btn--ghost btn--sm" data-action="edit" data-id="${p.id}">編集</button>
-            <button type="button" class="btn btn--danger btn--sm" data-action="delete" data-id="${p.id}">削除</button>
+            <button type="button" class="btn btn--ghost btn--sm" data-action="edit" data-id="${esc(p.id)}">編集</button>
+            <button type="button" class="btn btn--danger btn--sm" data-action="delete" data-id="${esc(p.id)}">削除</button>
           </div>
         </td>
       `;

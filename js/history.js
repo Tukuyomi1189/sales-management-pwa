@@ -26,12 +26,8 @@
   const fmt = (n) => window.App.formatCurrency(n);
   const esc = (s) => window.App.escapeHtml(s);
 
-  function itemsSummaryText(sale) {
-    return sale.items.map((i) => `${i.productName} × ${i.quantity}`).join(', ');
-  }
-
   function itemsSummaryHtml(sale) {
-    return sale.items.map((i) => `${i.ageRestricted ? '<span class="age-tag age-tag--sm">年齢確認</span>' : ''}${esc(i.productName)} × ${i.quantity}`).join(', ');
+    return sale.items.map((i) => `${i.ageRestricted ? '<span class="age-tag age-tag--sm">年齢確認</span>' : ''}${esc(i.productName)} × ${Number(i.quantity) || 0}`).join(', ');
   }
 
   function paymentHtml(sale) {
@@ -47,7 +43,6 @@
     const q = query.trim().toLowerCase();
     if (!q) return sales;
     return sales.filter((s) => (
-      (s.customerName || '').toLowerCase().includes(q) ||
       (s.note || '').toLowerCase().includes(q) ||
       s.items.some((i) => (i.productName || '').toLowerCase().includes(q))
     ));
@@ -64,18 +59,17 @@
       applyHighlight(tr);
       tr.innerHTML = `
         <td class="checkbox-col h-check">
-          <input type="checkbox" class="sale-row-checkbox" data-id="${s.id}" aria-label="この売上を選択" ${selectedIds.has(s.id) ? 'checked' : ''} />
+          <input type="checkbox" class="sale-row-checkbox" data-id="${esc(s.id)}" aria-label="この売上を選択" ${selectedIds.has(s.id) ? 'checked' : ''} />
         </td>
         <td class="h-date">${window.App.formatDateTime(s.createdAt)}${s.pending ? ' <span class="sync-pill" title="この端末には保存済み。オンライン時にクラウドへ自動同期されます">同期待ち</span>' : ''}</td>
-        <td class="h-customer">${esc(s.customerName) || '一般客'}</td>
         <td class="name-cell h-items">${itemsSummaryHtml(s)}${s.note ? `<span class="payment-detail">メモ: ${esc(s.note)}</span>` : ''}</td>
         <td class="num h-total">${fmt(s.totalAmount)}</td>
         <td class="h-payment">${paymentHtml(s)}</td>
         <td class="h-updated">${window.App.formatDateTime(s.updatedAt)}</td>
         <td class="actions-col h-actions">
           <div class="row-actions">
-            <button type="button" class="btn btn--ghost btn--sm" data-action="edit" data-id="${s.id}">編集</button>
-            <button type="button" class="btn btn--danger btn--sm" data-action="delete" data-id="${s.id}">削除</button>
+            <button type="button" class="btn btn--ghost btn--sm" data-action="edit" data-id="${esc(s.id)}">編集</button>
+            <button type="button" class="btn btn--danger btn--sm" data-action="delete" data-id="${esc(s.id)}">削除</button>
           </div>
         </td>
       `;
@@ -271,6 +265,9 @@
     return out;
   }
 
+  /** Ids Firestore generates (20 letters/digits) or similar; also safe inside HTML attributes. */
+  const SAFE_ID = /^[A-Za-z0-9_-]{1,100}$/;
+
   async function importJSON(file) {
     try {
       const data = JSON.parse(await file.text());
@@ -280,11 +277,11 @@
         .filter((item) => item && typeof item === 'object' && Array.isArray(item.items) && item.items.length > 0)
         .map((item) => {
           const sale = {
-            ...(typeof item.id === 'string' && item.id.trim() && !item.id.includes('/') ? { id: item.id.trim() } : {}),
+            // Keep the id (re-importing a backup then overwrites instead of duplicating) only
+            // when it looks like one this app makes: anything else gets a new id.
+            ...(typeof item.id === 'string' && SAFE_ID.test(item.id) ? { id: item.id } : {}),
             date: typeof item.date === 'string' ? item.date : '',
             ...(typeof item.eventId === 'string' && item.eventId ? { eventId: item.eventId } : {}),
-            customerId: item.customerId != null ? Number(item.customerId) : null,
-            customerName: item.customerName || '',
             note: item.note || '',
             items: item.items
               .filter((i) => i && i.productName)
@@ -311,6 +308,10 @@
       const existingIds = new Set(allSales.map((s) => s.id));
       const overwritten = cleaned.filter((s) => s.id && existingIds.has(s.id)).length;
       const added = cleaned.length - overwritten;
+      if (overwritten > 0) {
+        const ok = window.confirm(`売上をインポートします: 追加 ${added}件 / 上書き ${overwritten}件\n同じ売上は、ファイルの内容で上書きされます(古いバックアップだと、その後に編集した内容が元に戻ります。在庫数は変わりません)。よろしいですか?`);
+        if (!ok) return;
+      }
       await window.SalesDB.bulkImport(cleaned);
       window.App.showToast(`売上をインポートしました: 追加 ${added}件 / 上書き ${overwritten}件(在庫数は変更されません)。`);
     } catch (err) {
