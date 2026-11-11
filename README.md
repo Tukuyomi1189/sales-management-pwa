@@ -114,6 +114,9 @@ manifest.json           PWAマニフェスト
 firebase.json            Firebase CLI設定(Firestoreルールのデプロイ先指定)
 firestore.rules          Firestoreセキュリティルール(共有コード単位のアクセス制御。sales と products)
 icons/                  ホーム画面アイコン一式(通常 / maskable、192px・512px)
+docs/操作マニュアル.pdf  操作マニュアル(画像入り)
+tests/                  自動テスト(Playwright。下の「テスト」を参照)
+.github/workflows/test.yml  プルリクエストごとにテストを自動実行
 ```
 
 ## データモデルのポイント
@@ -170,6 +173,38 @@ python -m http.server 8080
 ```
 
 ブラウザで `http://localhost:8080` を開きます(`localhost` は secure context 扱いのため Service Worker が有効になります)。一度読み込めば、以降はネットワークを切っても利用できます。
+
+## テスト
+
+`tests/` に自動テストがあります。ブラウザ(Chromium)で実際に画面を操作し、結果を自動で判定します。Firebase は使わず、`tests/lib/mock-firebase-init.js`(Firestore の代わり。複数のページを「複数の端末」として扱える)に差し替えて動かします。
+
+```bash
+cd tests
+npm ci
+npx playwright install chromium   # 初回のみ
+node run.mjs                      # すべて実行(約2分)
+node run.mjs data-integrity       # 名前に一致するものだけ実行
+```
+
+- **GitHub での自動実行**: プルリクエストを作る・更新するたびに `.github/workflows/test.yml` が全テストを実行し、結果がプルリクエストに表示されます(master へのマージ後にも実行)。失敗したときはスクリーンショットなどを「Artifacts」から取得できます
+- **`static/service-worker.check.mjs`**(ブラウザなし): 画面が読み込むファイルがすべて `PRECACHE_URLS` に入っているか、Firebase SDK のバージョンが `js/firebase-init.js` と一致しているか、アプリのファイルを変えたのに `CACHE_VERSION` を上げ忘れていないか(プルリクエストのときだけ。`BASE_REF=master node static/service-worker.check.mjs` で手元でも確認できる)
+- **`e2e/*.test.mjs`**(画面操作):
+
+| ファイル | 確認していること |
+| --- | --- |
+| `register` | レジ一式(カテゴリ・バーコード・在庫不足・単価変更・全取消/元に戻す・お会計・取り消し・履歴の編集)と、iPad 各サイズ・スマホでのレイアウト、オフラインでの会計 |
+| `checkout-close` | お会計画面の閉じ方(入力中は閉じない・完了画面は外側/余白のタップで閉じる) |
+| `tender-settings` | お預かりボタンの金額設定 |
+| `shared-stock` | 在庫の共有(無償配布)と、共有元の削除・コード変更の扱い |
+| `age-sort-arrange` | 年齢確認の表示、商品マスタの並べ替え、レジのボタンの並び替え |
+| `cloud-sync` | 2台の端末での商品・在庫の共有、旧ローカル商品のアップロード、ルール未反映時の動作 |
+| `settlement` | 精算(精算先ごとの集計・選択合計・CSV) |
+| `stock-display` | 在庫数を隠す設定、開始時の在庫の記録 |
+| `phone-layout` | スマホの画面(下のタブ・明細シート・全画面のお会計・…その他) |
+| `data-integrity` | 商品編集で在庫が戻らない・バックアップの二重読み込み・編集後のお預かり/お釣り |
+| `service-worker` | 本物の service worker でのオフライン起動と会計、マニュアルPDFが開けること |
+
+古いコードに対してテストを動かすときは `APP_ROOT=/path/to/old/copy node e2e/data-integrity.test.mjs` のように指定します(不具合を直す前に、テストがその不具合を捉えているかの確認に使える)。
 
 ## 端末間でデータを共有する
 

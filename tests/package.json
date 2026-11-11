@@ -1,0 +1,12 @@
+{
+  "name": "sales-management-pwa-tests",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end tests for the sales management PWA (Playwright + a Firestore look-alike).",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
