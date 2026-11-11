@@ -50,6 +50,9 @@
 
   const LOW_STOCK_THRESHOLD = 5;
 
+  const startStockButton = document.getElementById('start-stock-button');
+  const startStockStatus = document.getElementById('start-stock-status');
+
   let allProducts = [];
   let editingId = null;
   let editingOriginalCode = '';
@@ -332,6 +335,37 @@
     ));
   }
 
+  // 開始時の在庫 (recorded with 「開始時の在庫を記録」). Shared-stock products show their source's.
+  function startStockCell(p, source) {
+    const owner = sourceCodeOf(p) ? source : p;
+    const has = owner && owner.startStockAt && owner.startStock !== undefined && owner.startStock !== null;
+    return `<span class="p-start__label">開始時 </span>${has ? esc(owner.startStock) : '<span class="muted">-</span>'}`;
+  }
+
+  function renderStartStockStatus() {
+    const at = window.ProductDB.lastStartStockAt();
+    startStockStatus.textContent = at ? `${window.App.formatDateTime(at)} に記録` : '未記録';
+  }
+
+  startStockButton.addEventListener('click', async () => {
+    const prev = window.ProductDB.lastStartStockAt();
+    const message = prev
+      ? `今の在庫数を「開始時の在庫」として記録します。\n前回の記録(${window.App.formatDateTime(prev)})は上書きされます。よろしいですか?`
+      : '今の在庫数を「開始時の在庫」として記録します。よろしいですか?';
+    if (!window.confirm(message)) return;
+    startStockButton.disabled = true;
+    try {
+      const { count } = await window.ProductDB.recordStartStock();
+      window.App.showToast(`${count}件の商品の開始時の在庫を記録しました。`);
+      await refreshList();
+    } catch (err) {
+      console.error(err);
+      window.App.showToast('開始時の在庫を記録できませんでした: ' + err.message, true);
+    } finally {
+      startStockButton.disabled = false;
+    }
+  });
+
   function renderTable(unsorted) {
     const products = sortProducts(unsorted);
     tableBody.innerHTML = '';
@@ -354,6 +388,7 @@
         <td class="p-category">${window.App.escapeHtml(p.category) || '-'}</td>
         <td class="num p-price">${window.App.formatCurrency(p.price)}</td>
         <td class="num p-stock">${stockCell}</td>
+        <td class="num p-start">${startStockCell(p, source)}</td>
         <td class="p-unit">${window.App.escapeHtml(p.unit) || '-'}</td>
         <td class="p-updated">${window.App.formatDateTime(p.updatedAt)}</td>
         <td class="actions-col p-actions">
@@ -366,6 +401,7 @@
       fragment.appendChild(tr);
     }
     tableBody.appendChild(fragment);
+    renderStartStockStatus();
   }
 
   function updateSummary(visibleProducts) {
@@ -460,6 +496,9 @@
           stockSourceCode: item.stockSourceCode ? String(item.stockSourceCode).trim() : '',
           payee: item.payee ? String(item.payee).trim() : '',
           ageRestricted: item.ageRestricted === true,
+          ...(item.startStockAt && Number.isFinite(Number(item.startStock))
+            ? { startStock: Number(item.startStock), startStockAt: String(item.startStockAt) }
+            : {}),
           createdAt: item.createdAt,
         }));
 
