@@ -1,6 +1,6 @@
 /* Service worker: caches the app shell so the app works fully offline. */
 
-const CACHE_VERSION = 'v25';
+const CACHE_VERSION = 'v26';
 const CACHE_NAME = `sales-management-shell-${CACHE_VERSION}`;
 
 // Must match the SDK_VERSION constant in js/firebase-init.js. Each of these 3
@@ -24,7 +24,6 @@ const PRECACHE_URLS = [
   './js/db.js',
   './js/router.js',
   './js/products.js',
-  './js/customers.js',
   './js/register.js',
   './js/history.js',
   './js/settings.js',

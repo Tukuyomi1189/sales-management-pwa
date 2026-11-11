@@ -1099,7 +1099,7 @@ body:has(.view--register:not([hidden])) .app-footer {
   font-variant-numeric: tabular-nums;
 }
 
-/* Customer / memo (collapsed) */
+/* Memo (collapsed) */
 .cart__extra {
   border-top: 1px solid var(--color-border);
   padding: 0 14px;
@@ -2714,7 +2714,7 @@ body:has(.view--register:not([hidden])) .app-footer {
     grid-template-areas:
       "check date total"
       "items items items"
-      "customer payment payment"
+      "payment payment payment"
       "actions actions actions";
     gap: 6px 10px;
     align-items: center;
@@ -2733,8 +2733,7 @@ body:has(.view--register:not([hidden])) .app-footer {
   [data-view-panel="history"] .h-date { grid-area: date; font-weight: 700; font-size: 0.85rem; }
   [data-view-panel="history"] .h-total { grid-area: total; font-size: 1.15rem; font-weight: 800; }
   [data-view-panel="history"] .h-items { grid-area: items; }
-  [data-view-panel="history"] .h-customer { grid-area: customer; font-size: 0.8rem; color: var(--color-text-muted); }
-  [data-view-panel="history"] .h-payment { grid-area: payment; font-size: 0.8rem; text-align: right; }
+  [data-view-panel="history"] .h-payment { grid-area: payment; font-size: 0.8rem; }
   [data-view-panel="history"] .h-payment .payment-detail { display: inline; margin-left: 6px; }
   [data-view-panel="history"] .h-updated { display: none; }
   [data-view-panel="history"] .h-actions { grid-area: actions; }

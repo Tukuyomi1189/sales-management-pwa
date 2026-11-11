@@ -21,7 +21,6 @@ await runTest('register', async (t) => {
       for (let i = 0; i < P.length; i++) {
         await window.ProductDB.add({ code: `P-${String(i + 1).padStart(3, '0')}`, name: P[i][0], category: P[i][1], price: P[i][2], stock: i === 4 ? 1 : i === 13 ? 0 : 30, unit: '個' });
       }
-      await window.CustomerDB.add({ name: '株式会社サンプル' });
     });
     await page.goto(`${server.base}/#sales`);
     await page.waitForSelector('.product-tile');
@@ -110,7 +109,7 @@ await runTest('register', async (t) => {
     await page.locator('.tab-nav__btn[data-view="history"]').tap();
     await page.waitForSelector('#sale-table-body tr');
     const row = await page.locator('#sale-table-body tr').first().innerText();
-    t.match('history row', row, /一般客\tブレンドコーヒー × 2, 新刊 A5本 × 1, チーズケーキ × 2, 既刊セット × 1\t￥4,500\t現金\n預 ￥4,500 \/ 釣 ￥0/);
+    t.match('history row', row, /\tブレンドコーヒー × 2, 新刊 A5本 × 1, チーズケーキ × 2, 既刊セット × 1\t￥4,500\t現金\n預 ￥4,500 \/ 釣 ￥0/);
     t.eq('just-saved sale is highlighted', await page.locator('#sale-table-body tr.is-just-saved').count(), 1);
 
     await page.locator('#sale-table-body button[data-action="edit"]').first().tap();

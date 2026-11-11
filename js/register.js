@@ -96,7 +96,6 @@
 
   const $ = (id) => document.getElementById(id);
 
-  const customerField = $('sale-field-customer');
   const noteField = $('sale-field-note');
   const extraDetails = $('sale-extra');
   const extraSummary = $('sale-extra-summary');
@@ -155,7 +154,6 @@
   let productByCode = new Map(); // code -> product, for shared stock (stockSourceCode)
   let categoryColor = new Map();
   let activeCategory = ''; // '' = すべて
-  let customersCache = [];
   let items = []; // { key, productId, unitPrice, quantity } — `key` identifies the cart row in the DOM
   let nextItemKey = 1;
   let expandedKey = null;
@@ -172,7 +170,9 @@
   const esc = (s) => window.App.escapeHtml(s);
 
   function makeItem(productId, unitPrice, quantity) {
-    return { key: nextItemKey++, productId: pid(productId), unitPrice, quantity };
+    // Coerced: a sale loaded for editing comes from the shared database, where any device
+    // (or an imported file) could have written a non-number, and these go into the HTML.
+    return { key: nextItemKey++, productId: pid(productId), unitPrice: Number(unitPrice) || 0, quantity: Number(quantity) || 0 };
   }
 
   /** Accepts full-width digits (IME on) and strips anything else; null when there is no digit at all. */
@@ -199,17 +199,6 @@
   }
 
   // ---------- Master data ----------
-
-  async function refreshCustomerOptions() {
-    customersCache = await window.CustomerDB.getAll();
-    const currentValue = customerField.value;
-    customerField.innerHTML = '<option value="">選択なし(一般客)</option>' +
-      customersCache.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-    if (currentValue && customersCache.some((c) => String(c.id) === currentValue)) {
-      customerField.value = currentValue;
-    }
-    updateExtraSummary();
-  }
 
   /**
    * The register uses a fixed order (product code, then name) so buttons stay put,
@@ -867,17 +856,12 @@
   window.addEventListener('hashchange', () => setCartSheet(false));
   window.matchMedia('(max-width: 759px)').addEventListener?.('change', () => setCartSheet(false));
 
-  // ---------- Customer / memo (collapsed by default) ----------
+  // ---------- Memo (collapsed by default) ----------
 
   function updateExtraSummary() {
-    const parts = [];
-    const customer = customersCache.find((c) => String(c.id) === customerField.value);
-    if (customer) parts.push(customer.name);
-    if (noteField.value.trim()) parts.push('メモあり');
-    extraSummary.textContent = parts.length ? `: ${parts.join(' / ')}` : '';
+    extraSummary.textContent = noteField.value.trim() ? ': メモあり' : '';
   }
 
-  customerField.addEventListener('change', updateExtraSummary);
   noteField.addEventListener('input', updateExtraSummary);
 
   // ---------- Cart state helpers ----------
@@ -885,14 +869,12 @@
   function snapshotCart() {
     return {
       items: items.map((i) => ({ productId: i.productId, unitPrice: i.unitPrice, quantity: i.quantity })),
-      customerId: customerField.value,
       note: noteField.value,
     };
   }
 
   function restoreCart(snapshot) {
     items = snapshot.items.map((i) => makeItem(i.productId, i.unitPrice, i.quantity));
-    customerField.value = snapshot.customerId;
     noteField.value = snapshot.note;
     expandedKey = null;
     updateExtraSummary();
@@ -904,7 +886,6 @@
     const touched = new Set(items.map((i) => i.productId));
     items = [];
     expandedKey = null;
-    customerField.value = '';
     noteField.value = '';
     extraDetails.open = false;
     updateExtraSummary();
@@ -926,9 +907,8 @@
   function startEdit(sale) {
     setEditing(sale);
     items = sale.items.map((i) => makeItem(pid(i.productId), i.unitPrice, i.quantity));
-    customerField.value = sale.customerId ? String(sale.customerId) : '';
     noteField.value = sale.note || '';
-    extraDetails.open = !!(sale.customerId || sale.note);
+    extraDetails.open = !!sale.note;
     expandedKey = null;
     updateExtraSummary();
     clearFormError();
@@ -963,12 +943,10 @@
       });
   }
 
+  // No customer fields: customers were removed (an edit leaves an older sale's
+  // customerId / customerName untouched in the database).
   function buildPayload() {
-    const customerId = customerField.value ? Number(customerField.value) : null;
-    const customer = customerId ? customersCache.find((c) => c.id === customerId) : null;
     return {
-      customerId,
-      customerName: customer ? customer.name : '',
       note: noteField.value.trim(),
       items: preparedItemsFrom(items),
     };
@@ -1296,7 +1274,7 @@
   // ---------- Activation ----------
 
   async function activate() {
-    await Promise.all([refreshProductsCache(), refreshCustomerOptions()]);
+    await refreshProductsCache();
     renderCategoryTabs();
     renderProductGrid();
     renderCart();
@@ -1312,7 +1290,6 @@
     getShowStock,
     setShowStock,
     reloadProducts,
-    refreshCustomerOptions,
     isEditing: (id) => editing?.id === id,
     cancelEditIf(id) {
       if (editing?.id === id) {
@@ -1321,8 +1298,8 @@
       }
     },
   };
-  // Back-compat: products.js / customers.js call window.SalesView.*
-  window.SalesView = { refreshCustomerOptions, refreshProductsCache: reloadProducts, refreshList: () => window.HistoryView?.refreshList() };
+  // Back-compat: products.js calls window.SalesView.*
+  window.SalesView = { refreshProductsCache: reloadProducts, refreshList: () => window.HistoryView?.refreshList() };
   window.PaymentMethods = PAYMENT_METHODS;
   window.Router.onViewActivate('sales', activate);
 })();

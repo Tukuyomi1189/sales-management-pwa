@@ -10,7 +10,6 @@
   const statTilesContainer = document.getElementById('report-stat-tiles');
   const dailyChartContainer = document.getElementById('report-daily-chart');
   const productRankingContainer = document.getElementById('report-product-ranking');
-  const customerRankingContainer = document.getElementById('report-customer-ranking');
   const reportsPanel = document.querySelector('[data-view-panel="reports"]');
   const chartModeButtons = document.querySelectorAll('.chart-mode-toggle__btn');
   const hourlyDateField = document.getElementById('hourly-date-field');
@@ -262,7 +261,7 @@
     }
   }
 
-  // ---------- Rankings (product / customer) ----------
+  // ---------- Product ranking ----------
 
   function aggregateProducts(filtered) {
     const map = new Map();
@@ -277,18 +276,6 @@
       }
     }
     return [...map.values()].sort((a, b) => b.amount - a.amount || b.qty - a.qty).slice(0, 8);
-  }
-
-  function aggregateCustomers(filtered) {
-    const map = new Map();
-    for (const s of filtered) {
-      const key = s.customerId || 'none';
-      const name = s.customerName || '一般客';
-      const prev = map.get(key) || { name, amount: 0 };
-      prev.amount += Number(s.totalAmount) || 0;
-      map.set(key, prev);
-    }
-    return [...map.values()].sort((a, b) => b.amount - a.amount).slice(0, 8);
   }
 
   function renderRanking(container, rows) {
@@ -415,7 +402,6 @@
     renderStatTiles(filtered);
     renderChart(filtered, from, to);
     renderRanking(productRankingContainer, aggregateProducts(filtered));
-    renderRanking(customerRankingContainer, aggregateCustomers(filtered));
     const label = event ? `イベント: ${event.name}(${window.EventDB.datesText(event)})` : '';
     window.SettlementView?.render(filtered, { from, to, label });
     window.EventsView?.renderReconcile(event, filtered);

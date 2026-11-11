@@ -9,7 +9,6 @@
  * signed in (even anonymously) and knows the code can read/write it, so it
  * should be treated like a shared password, not a public identifier.
  *
- * Customers are not shared: they stay in this device's IndexedDB (see js/db.js).
  */
 
 (() => {

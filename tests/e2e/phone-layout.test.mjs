@@ -67,7 +67,7 @@ await runTest('phone-layout', async (t) => {
   await more.tap();
   t.eq('…その他 shows them', await page.locator('#sale-export-button').isVisible(), true);
   t.eq('history: no horizontal overflow', await overflowX(), false);
-  for (const view of ['reports', 'customers', 'settings']) {
+  for (const view of ['reports', 'settings']) {
     await page.evaluate((v) => { location.hash = v; }, view);
     await page.waitForTimeout(300);
     t.eq(`${view}: no horizontal overflow`, await overflowX(), false);

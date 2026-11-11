@@ -42,7 +42,6 @@
   <button type="button" class="tab-nav__btn" data-view="history"><svg class="tab-nav__icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span class="tab-nav__label">売上履歴</span></button>
   <button type="button" class="tab-nav__btn" data-view="reports"><svg class="tab-nav__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="tab-nav__label">レポート</span></button>
   <button type="button" class="tab-nav__btn" data-view="products"><svg class="tab-nav__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 12.5 11 5h7.5v7.5L11 20z"/><circle cx="15" cy="8.5" r="1.3"/></svg><span class="tab-nav__label">商品マスタ</span></button>
-  <button type="button" class="tab-nav__btn" data-view="customers"><svg class="tab-nav__icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2"/><path d="M3 19.5c.6-3.2 3-5 6-5s5.4 1.8 6 5"/><path d="M15.5 5.6a3 3 0 0 1 0 5.8M18 14.8c1.6.7 2.7 2.3 3 4.7"/></svg><span class="tab-nav__label">顧客管理</span></button>
   <button type="button" class="tab-nav__btn" data-view="settings"><svg class="tab-nav__icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></svg><span class="tab-nav__label">設定</span></button>
 </nav>
 
@@ -91,14 +90,8 @@
       <p id="line-items-empty" class="cart-empty">左の商品をタップして追加</p>
 
       <details class="cart__extra" id="sale-extra">
-        <summary>顧客・メモ<span id="sale-extra-summary" class="cart__extra-summary"></span></summary>
+        <summary>メモ<span id="sale-extra-summary" class="cart__extra-summary"></span></summary>
         <div class="cart__extra-fields">
-          <div class="field">
-            <label for="sale-field-customer">顧客</label>
-            <select id="sale-field-customer">
-              <option value="">選択なし(一般客)</option>
-            </select>
-          </div>
           <div class="field">
             <label for="sale-field-note">メモ</label>
             <input type="text" id="sale-field-note" placeholder="任意メモ" autocomplete="off" />
@@ -206,7 +199,7 @@
     <div class="toolbar">
       <div class="field field--search">
         <label for="sale-search-input" class="sr-only">検索</label>
-        <input type="search" id="sale-search-input" placeholder="顧客名・商品名・メモで検索" autocomplete="off" />
+        <input type="search" id="sale-search-input" placeholder="商品名・メモで検索" autocomplete="off" />
       </div>
       <button type="button" class="btn btn--ghost btn--sm toolbar__more" aria-expanded="false" aria-label="その他の操作">…その他</button>
       <div class="toolbar__actions">
@@ -225,7 +218,6 @@
           <tr>
             <th scope="col" class="checkbox-col"><input type="checkbox" id="sale-select-all" aria-label="表示中の売上をすべて選択" /></th>
             <th scope="col">売上日時</th>
-            <th scope="col">顧客</th>
             <th scope="col">明細</th>
             <th scope="col" class="num">合計金額</th>
             <th scope="col">支払い</th>
@@ -347,10 +339,6 @@
     <section class="panel">
       <h2 class="panel__title">商品別売上ランキング</h2>
       <div id="report-product-ranking" class="ranking-wrap"></div>
-    </section>
-    <section class="panel">
-      <h2 class="panel__title">顧客別売上ランキング</h2>
-      <div id="report-customer-ranking" class="ranking-wrap"></div>
     </section>
   </div>
 
@@ -540,95 +528,10 @@
   </section>
 </section>
 
-<!-- ============ 顧客管理 ============ -->
-<section class="view" data-view-panel="customers" hidden>
-  <p class="tagline">顧客マスタ管理 — データはこの端末内(IndexedDB)に保存され、オフラインでも利用できます。</p>
-
-  <section class="panel" aria-labelledby="customer-form-heading">
-    <h2 id="customer-form-heading" class="panel__title">
-      <span id="customer-form-mode-label">顧客を登録</span>
-    </h2>
-    <form id="customer-form" class="product-form" novalidate>
-      <input type="hidden" id="customer-id" />
-
-      <div class="form-grid">
-        <div class="field field--required">
-          <label for="customer-field-name">顧客名 <span class="req">必須</span></label>
-          <input type="text" id="customer-field-name" placeholder="例: 株式会社サンプル" required autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="customer-field-contact">担当者名</label>
-          <input type="text" id="customer-field-contact" placeholder="例: 山田太郎" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="customer-field-phone">電話番号</label>
-          <input type="tel" id="customer-field-phone" placeholder="例: 03-1234-5678" autocomplete="off" />
-        </div>
-        <div class="field">
-          <label for="customer-field-email">メールアドレス</label>
-          <input type="email" id="customer-field-email" placeholder="例: sample@example.com" autocomplete="off" />
-        </div>
-        <div class="field field--wide">
-          <label for="customer-field-address">住所</label>
-          <input type="text" id="customer-field-address" autocomplete="off" />
-        </div>
-        <div class="field field--wide">
-          <label for="customer-field-note">メモ</label>
-          <input type="text" id="customer-field-note" placeholder="任意メモ" autocomplete="off" />
-        </div>
-      </div>
-
-      <div class="form-actions">
-        <button type="submit" id="customer-submit-button" class="btn btn--primary">登録する</button>
-        <button type="button" id="customer-cancel-edit-button" class="btn btn--ghost" hidden>編集をキャンセル</button>
-        <span id="customer-form-message" class="form-message" role="alert" aria-live="polite"></span>
-      </div>
-    </form>
-  </section>
-
-  <section class="panel" aria-labelledby="customer-list-heading">
-    <div class="panel__header">
-      <h2 id="customer-list-heading" class="panel__title">顧客一覧</h2>
-      <div class="summary" id="customer-summary-stats" aria-live="polite"></div>
-    </div>
-    <div class="toolbar">
-      <div class="field field--search">
-        <label for="customer-search-input" class="sr-only">検索</label>
-        <input type="search" id="customer-search-input" placeholder="顧客名・担当者名で検索" autocomplete="off" />
-      </div>
-      <button type="button" class="btn btn--ghost btn--sm toolbar__more" aria-expanded="false" aria-label="その他の操作">…その他</button>
-      <div class="toolbar__actions">
-        <button id="customer-export-button" class="btn btn--ghost" type="button">JSONエクスポート</button>
-        <label class="btn btn--ghost btn--file">
-          JSONインポート
-          <input type="file" id="customer-import-input" accept="application/json" hidden />
-        </label>
-      </div>
-    </div>
-    <div class="table-wrap">
-      <table class="product-table">
-        <thead>
-          <tr>
-            <th scope="col">顧客名</th>
-            <th scope="col">担当者</th>
-            <th scope="col">電話番号</th>
-            <th scope="col">メール</th>
-            <th scope="col">住所</th>
-            <th scope="col">更新日時</th>
-            <th scope="col" class="actions-col">操作</th>
-          </tr>
-        </thead>
-        <tbody id="customer-table-body"></tbody>
-      </table>
-      <p id="customer-empty-state" class="empty-state" hidden>登録されている顧客がありません。</p>
-    </div>
-  </section>
-</section>
-
 </main>
 
 <footer class="app-footer">
-  <p>売上と商品マスタは共有コードでのリアルタイム同期のためFirebase(Google Cloud)に保存されます。顧客データは端末内のみに保存されます。</p>
+  <p>売上・商品マスタ・イベントは、共有コードでのリアルタイム同期のため Firebase(Google Cloud)に保存されます。</p>
 </footer>
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
@@ -663,7 +566,6 @@
 <script src="js/db.js"></script>
 <script src="js/router.js"></script>
 <script src="js/products.js"></script>
-<script src="js/customers.js"></script>
 <script src="js/register.js"></script>
 <script src="js/history.js"></script>
 <script src="js/settings.js"></script>
