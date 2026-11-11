@@ -226,8 +226,10 @@ const SalesDB = {
     const col = await salesCollection();
     const now = new Date();
     const nowIso = now.toISOString();
+    const event = window.EventDB?.currentSync();
     const record = {
       ...sale,
+      ...(event ? { eventId: event.id } : {}),
       date: localDateString(now),
       totalAmount: calcTotal(sale.items),
       createdAt: nowIso,
@@ -604,42 +606,23 @@ const ProductDB = (() => {
     },
 
     /**
-     * Record every product's current stock as its 開始時の在庫 (startStock + startStockAt),
-     * e.g. right before an event opens. Pressing it again overwrites the previous record.
-     * Shared-stock products (stockSourceCode) have no stock of their own and are skipped;
-     * their source product is recorded. `updatedAt` is left alone: this is not an edit.
+     * Every product's current stock, keyed by product id, for the products that own their
+     * stock (shared-stock products such as 「新刊(無償)」 use their source's and are left out).
+     * Used for an event's 開始時在庫 / 終了時在庫.
      */
-    async recordStartStock() {
+    async stockSnapshot() {
       await start();
-      const at = nowIso();
-      const owners = [...products.values()].filter((p) => {
+      const snap = {};
+      for (const p of products.values()) {
         const code = String(p.stockSourceCode || '').trim();
-        return !code || !findByCodeSync(code);
-      });
-      if (mode === 'local') {
-        for (const p of owners) await LocalProductDB.update(Number(p.id), { startStock: Number(p.stock) || 0, startStockAt: at });
-        await loadLocal();
-        notify();
-        return { count: owners.length, at };
+        if (code && findByCodeSync(code)) continue;
+        snap[p.id] = Number(p.stock) || 0;
       }
-      const { fs } = await window.Cloud.ready;
-      const col = await productsCollection();
-      const writes = owners.map((p) => {
-        const startStock = Number(p.stock) || 0;
-        products.set(p.id, { ...p, startStock, startStockAt: at });
-        return fs.updateDoc(fs.doc(col, p.id), { startStock, startStockAt: at });
-      });
-      if (writes.length) syncInBackground(Promise.all(writes), '開始時の在庫の記録');
-      notify();
-      return { count: owners.length, at };
+      return snap;
     },
 
-    /** When 開始時の在庫 was last recorded (ISO string), or '' if never. */
-    lastStartStockAt() {
-      let latest = '';
-      for (const p of products.values()) if (p.startStockAt && p.startStockAt > latest) latest = p.startStockAt;
-      return latest;
-    },
+    /** Same as getStockOwner, without waiting (products must already be loaded). */
+    stockOwnerSync: (id) => copy(stockOwnerSync(id)),
 
     /** Call `fn` whenever the product list changes (this device or any other). Returns an unsubscribe fn. */
     subscribe(fn) {
@@ -689,6 +672,266 @@ const ProductDB = (() => {
   return api;
 })();
 
+// ---------- Events (cloud-synced): workspaces/{workspaceId}/events ----------
+
+/**
+ * An event (コミティア150, 2日開催なら開始日〜終了日) groups sales for reports, settlement and
+ * the stock check (在庫の照合). Shared by every device with the same workspace code.
+ *
+ * - 「イベントを開始」 records every product's stock (startStock: {productId: n}); while it is
+ *   open, new sales carry its id (SalesDB.add). 「イベントを締める」 records endStock + closedAt.
+ *   Only one event is open at a time.
+ * - A sale without an eventId (e.g. from a device that had not loaded the event yet) still
+ *   belongs to an event when it was made between 開始 and 締め; for a past event (no such
+ *   times) when its date falls within the event's dates. Nothing is rewritten.
+ * - Past events can be created with just a name and dates (no stock record).
+ * - If the Firestore rules don't allow `events` yet, events live in this device's
+ *   localStorage instead and the UI says so; sales and products are unaffected.
+ */
+const EventDB = (() => {
+  const LOCAL_KEY = 'sales-management-local-events';
+  let mode = 'cloud'; // 'cloud' | 'local'
+  let events = new Map(); // id -> event
+  let ready = null;
+  let fallbackReason = '';
+  const listeners = new Set();
+  const nowIso = () => new Date().toISOString();
+  const copy = (e) => (e ? JSON.parse(JSON.stringify(e)) : undefined);
+
+  function notify() {
+    for (const fn of listeners) {
+      try { fn(); } catch (err) { console.error(err); }
+    }
+  }
+
+  async function eventsCollection() {
+    const { firestore, fs } = await window.Cloud.ready;
+    return fs.collection(firestore, 'workspaces', window.Cloud.getWorkspaceId(), 'events');
+  }
+
+  function loadLocal() {
+    try {
+      const all = JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}');
+      events = new Map(Object.entries(all).map(([id, e]) => [id, { ...e, id }]));
+    } catch {
+      events = new Map();
+    }
+  }
+
+  function saveLocal() {
+    try {
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(Object.fromEntries([...events].map(([id, { id: _id, ...e }]) => [id, e]))));
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function fallBackToLocal(err) {
+    if (mode === 'local') return;
+    mode = 'local';
+    const denied = err && (err.code === 'permission-denied' || /permission/i.test(err.message || ''));
+    fallbackReason = denied
+      ? 'Firestoreのルールでイベントの共有が許可されていません(ルール未反映)'
+      : `クラウドに接続できません(${err && err.message ? err.message : '不明なエラー'})`;
+    console.warn('EventDB: keeping events on this device only —', fallbackReason);
+    loadLocal();
+  }
+
+  function start() {
+    if (ready) return ready;
+    ready = new Promise((resolve) => {
+      let settled = false;
+      const settle = () => { if (!settled) { settled = true; resolve(); } };
+      (async () => {
+        try {
+          const { fs } = await window.Cloud.ready;
+          const col = await eventsCollection();
+          fs.onSnapshot(col, (snap) => {
+            if (mode !== 'cloud') return;
+            events = new Map(snap.docs.map((d) => [d.id, { ...d.data(), id: d.id }]));
+            settle();
+            notify();
+          }, (err) => {
+            console.error('EventDB subscribe error:', err);
+            fallBackToLocal(err);
+            settle();
+            notify();
+          });
+        } catch (err) {
+          fallBackToLocal(err);
+          settle();
+          notify();
+        }
+      })();
+    });
+    return ready;
+  }
+
+  async function write(id, data, label) {
+    if (mode === 'local') {
+      events.set(id, { ...(events.get(id) || {}), ...data, id });
+      saveLocal();
+      notify();
+      return;
+    }
+    const { fs } = await window.Cloud.ready;
+    const col = await eventsCollection();
+    const existing = events.get(id);
+    events.set(id, { ...(existing || {}), ...data, id });
+    syncInBackground(existing ? fs.updateDoc(fs.doc(col, id), data) : fs.setDoc(fs.doc(col, id), data), label);
+    notify();
+  }
+
+  async function newId() {
+    if (mode === 'local') return `local-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const { fs } = await window.Cloud.ready;
+    return fs.doc(await eventsCollection()).id;
+  }
+
+  const openEvents = () => [...events.values()].filter((e) => !e.closedAt);
+  const byStartDesc = (a, b) => (b.startDate || '').localeCompare(a.startDate || '') || (b.createdAt || '').localeCompare(a.createdAt || '');
+
+  function cleanDates({ startDate, endDate }) {
+    const s = String(startDate || '').trim();
+    const e = String(endDate || '').trim() || s;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || !/^\d{4}-\d{2}-\d{2}$/.test(e)) throw new Error('開催日を入力してください。');
+    if (e < s) throw new Error('終了日は開始日以降にしてください。');
+    return { startDate: s, endDate: e };
+  }
+
+  function cleanName(name) {
+    const n = String(name || '').trim();
+    if (!n) throw new Error('イベント名を入力してください。');
+    return n;
+  }
+
+  const api = {
+    ready: start,
+
+    async getAll() {
+      await start();
+      return [...events.values()].map(copy).sort(byStartDesc);
+    },
+
+    async get(id) {
+      await start();
+      return copy(events.get(String(id)));
+    },
+
+    /** The open event (or undefined), without waiting — events load at startup. */
+    currentSync() {
+      return copy(openEvents().sort(byStartDesc)[0]);
+    },
+
+    async current() {
+      await start();
+      return api.currentSync();
+    },
+
+    /** 「イベントを開始」: records every product's stock as 開始時在庫. */
+    async start({ name, startDate, endDate }) {
+      await start();
+      const open = api.currentSync();
+      if (open) throw new Error(`「${open.name}」が開催中です。先に締めてください。`);
+      const dates = cleanDates({ startDate, endDate });
+      const now = nowIso();
+      const id = await newId();
+      await write(id, {
+        name: cleanName(name), ...dates,
+        startedAt: now, closedAt: null,
+        startStock: await window.ProductDB.stockSnapshot(), endStock: null,
+        createdAt: now, updatedAt: now,
+      }, 'イベントの開始');
+      return id;
+    },
+
+    /** 「イベントを締める」: records every product's stock as 終了時在庫. */
+    async close(id) {
+      await start();
+      const event = events.get(String(id));
+      if (!event) throw new Error('イベントが見つかりません。');
+      if (event.closedAt) throw new Error('このイベントはすでに締めてあります。');
+      const now = nowIso();
+      await write(event.id, { closedAt: now, endStock: await window.ProductDB.stockSnapshot(), updatedAt: now }, 'イベントの締め');
+    },
+
+    /** A past event (no stock record): lets reports pick earlier sales by its dates. */
+    async addPast({ name, startDate, endDate }) {
+      await start();
+      const dates = cleanDates({ startDate, endDate });
+      const now = nowIso();
+      const id = await newId();
+      await write(id, {
+        name: cleanName(name), ...dates,
+        startedAt: null, closedAt: now, startStock: null, endStock: null, past: true,
+        createdAt: now, updatedAt: now,
+      }, 'イベントの登録');
+      return id;
+    },
+
+    /** Change the name / dates. */
+    async update(id, { name, startDate, endDate }) {
+      await start();
+      const event = events.get(String(id));
+      if (!event) throw new Error('イベントが見つかりません。');
+      await write(event.id, { name: cleanName(name), ...cleanDates({ startDate, endDate }), updatedAt: nowIso() }, 'イベントの更新');
+    },
+
+    async remove(id) {
+      await start();
+      const key = String(id);
+      if (mode === 'local') {
+        events.delete(key);
+        saveLocal();
+        notify();
+        return;
+      }
+      const { fs } = await window.Cloud.ready;
+      const col = await eventsCollection();
+      events.delete(key);
+      syncInBackground(fs.deleteDoc(fs.doc(col, key)), 'イベントの削除');
+      notify();
+    },
+
+    /**
+     * The sales that belong to `event`: those recorded with its id, plus those without an
+     * event (or whose event no longer exists) made while it was open — between 「開始」 and
+     * 「締める」 (still open → until now). A past event has no such times, so its dates decide.
+     * (Matching by date alone would also pull in sales from before 開始 / after 締め on the
+     * same day and skew the stock check.)
+     */
+    salesOf(event, sales) {
+      const known = new Set(events.keys());
+      const end = event.endDate || event.startDate;
+      const inWindow = event.startedAt
+        ? (s) => (s.createdAt || '') >= event.startedAt && (!event.closedAt || (s.createdAt || '') <= event.closedAt)
+        : (s) => s.date >= event.startDate && s.date <= end;
+      return sales.filter((s) => (s.eventId && known.has(s.eventId) ? s.eventId === event.id : inWindow(s)));
+    },
+
+    subscribe(fn) {
+      listeners.add(fn);
+      start();
+      return () => listeners.delete(fn);
+    },
+
+    /** "2026/11/23" or "2026/11/23〜11/24" (the year shown once when both days share it). */
+    datesText(event) {
+      const s = event?.startDate || '';
+      const e = event?.endDate || s;
+      const full = (d) => d.replaceAll('-', '/');
+      if (!s) return '';
+      if (e === s) return full(s);
+      return `${full(s)}〜${e.slice(0, 4) === s.slice(0, 4) ? e.slice(5).replace('-', '/') : full(e)}`;
+    },
+
+    isCloud: () => mode === 'cloud',
+    fallbackReason: () => fallbackReason,
+  };
+  return api;
+})();
+
+window.EventDB = EventDB;
 window.ProductDB = ProductDB;
 window.LocalProductDB = LocalProductDB;
 window.CustomerDB = CustomerDB;

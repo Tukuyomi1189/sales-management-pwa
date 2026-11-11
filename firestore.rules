@@ -4,13 +4,12 @@ rules_version = '2';
 // see js/firebase-init.js) that knows a workspace's shared code can read/write
 // that workspace's data. The workspace code itself is the access control —
 // treat it like a shared password, not a public identifier.
+//
+// Every collection directly under a workspace (sales, products, events, and any
+// added later) follows that same rule, so adding a feature needs no rule change.
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /workspaces/{workspaceId}/sales/{saleId} {
-      allow read, write: if request.auth != null;
-    }
-    // Product master (incl. stock), shared by every device with the same workspace code.
-    match /workspaces/{workspaceId}/products/{productId} {
+    match /workspaces/{workspaceId}/{collection}/{docId} {
       allow read, write: if request.auth != null;
     }
   }

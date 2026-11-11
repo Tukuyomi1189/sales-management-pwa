@@ -1,4 +1,5 @@
-/* Reports view: date-range filtering, stat tiles, daily trend chart, rankings. */
+/* Reports view: period or event filtering, stat tiles, daily trend chart, rankings (the 精算
+ * and 在庫の照合 sections are in js/settlement.js and js/events.js). */
 
 (() => {
   'use strict';
@@ -15,7 +16,15 @@
   const hourlyDateField = document.getElementById('hourly-date-field');
   const hourlyDateInput = document.getElementById('report-hourly-date');
 
+  const eventDetail = document.getElementById('report-event-detail');
+  const eventText = document.getElementById('report-event-text');
+  const eventEditButton = document.getElementById('report-event-edit');
+  const eventDeleteButton = document.getElementById('report-event-delete');
+  const eventAddPastButton = document.getElementById('report-event-add-past');
+  const EVENT_PREFIX = 'event:';
+
   let allSalesCache = [];
+  let eventsCache = [];
   let lastDailyPoints = null;
   let initialized = false;
   let chartMode = 'daily';
@@ -301,11 +310,98 @@
 
   // ---------- Orchestration ----------
 
+  // ---------- Events in the period select ----------
+
+  function selectedEvent() {
+    const v = presetSelect.value;
+    return v.startsWith(EVENT_PREFIX) ? eventsCache.find((e) => e.id === v.slice(EVENT_PREFIX.length)) : undefined;
+  }
+
+  /** Rebuild the 「イベント」 group of the period select, keeping the current choice if it still exists. */
+  function renderEventOptions(selectValue = presetSelect.value) {
+    presetSelect.querySelector('optgroup[data-events]')?.remove();
+    if (eventsCache.length) {
+      const group = document.createElement('optgroup');
+      group.label = 'イベント';
+      group.dataset.events = '';
+      for (const e of eventsCache) {
+        const opt = document.createElement('option');
+        opt.value = EVENT_PREFIX + e.id;
+        opt.textContent = `${e.closedAt ? '' : '[開催中] '}${e.name}(${window.EventDB.datesText(e)})`;
+        group.append(opt);
+      }
+      presetSelect.append(group);
+    }
+    const exists = [...presetSelect.options].some((o) => o.value === selectValue);
+    presetSelect.value = exists ? selectValue : 'this-month';
+  }
+
+  function renderEventDetail(event) {
+    eventDetail.hidden = !event;
+    if (!event) return;
+    const fmt = window.App.formatDateTime;
+    const state = !event.closedAt ? `開催中(${fmt(event.startedAt)} に開始)`
+      : event.past ? '過去のイベント(在庫の記録なし)'
+      : `${fmt(event.startedAt)} 開始 〜 ${fmt(event.closedAt)} 締め`;
+    eventText.innerHTML = `<strong>${window.App.escapeHtml(event.name)}</strong>(${window.App.escapeHtml(window.EventDB.datesText(event))})・${window.App.escapeHtml(state)}`;
+  }
+
+  eventEditButton.addEventListener('click', () => {
+    const event = selectedEvent();
+    if (!event) return;
+    window.EventsView.openForm({
+      title: 'イベントの名前・日付を変更',
+      submitLabel: '変更する',
+      hint: '日付を変えると、イベントの記録がない売上(導入前の売上など)のうち、どれをこのイベントとして集計するかも変わります。',
+      initial: event,
+      submit: (values) => window.EventDB.update(event.id, values),
+    });
+  });
+
+  eventDeleteButton.addEventListener('click', async () => {
+    const event = selectedEvent();
+    if (!event) return;
+    if (!window.confirm(`イベント「${event.name}」を削除します。売上と在庫は変わりません(このイベントの売上は、日付で集計されるようになります)。\n\n削除しますか?`)) return;
+    await window.EventDB.remove(event.id);
+    presetSelect.value = 'this-month';
+    render();
+    window.App.showToast(`イベント「${event.name}」を削除しました。`);
+  });
+
+  eventAddPastButton.addEventListener('click', () => {
+    window.EventsView.openForm({
+      title: '過去のイベントを登録',
+      submitLabel: '登録する',
+      hint: '開催日に記録された売上が、このイベントとして集計されます(在庫の記録はないので、在庫の照合は出ません)。',
+      submit: async (values) => {
+        const id = await window.EventDB.addPast(values);
+        eventsCache = await window.EventDB.getAll();
+        renderEventOptions(EVENT_PREFIX + id);
+        render();
+      },
+    });
+  });
+
+  // After every script has run (see js/events.js: the first update can arrive before app.js).
+  const subscribeEvents = () => window.EventDB.subscribe(async () => {
+    eventsCache = await window.EventDB.getAll();
+    renderEventOptions();
+    if (reportsPanel && !reportsPanel.hidden) render();
+  });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', subscribeEvents, { once: true });
+  else subscribeEvents();
+
   function render() {
     const preset = presetSelect.value;
+    const event = selectedEvent();
     let from;
     let to;
-    if (preset === 'custom') {
+    if (event) {
+      from = event.startDate;
+      to = event.endDate || event.startDate;
+      fromInput.value = from;
+      toInput.value = to;
+    } else if (preset === 'custom') {
       from = fromInput.value;
       to = toInput.value;
     } else {
@@ -314,12 +410,15 @@
       toInput.value = to;
     }
 
-    const filtered = filterByRange(allSalesCache, from, to);
+    const filtered = event ? window.EventDB.salesOf(event, allSalesCache) : filterByRange(allSalesCache, from, to);
+    renderEventDetail(event);
     renderStatTiles(filtered);
     renderChart(filtered, from, to);
     renderRanking(productRankingContainer, aggregateProducts(filtered));
     renderRanking(customerRankingContainer, aggregateCustomers(filtered));
-    window.SettlementView?.render(filtered, { from, to });
+    const label = event ? `イベント: ${event.name}(${window.EventDB.datesText(event)})` : '';
+    window.SettlementView?.render(filtered, { from, to, label });
+    window.EventsView?.renderReconcile(event, filtered);
   }
 
   presetSelect.addEventListener('change', render);
@@ -363,6 +462,8 @@
 
   async function activate() {
     allSalesCache = await window.SalesDB.getAll();
+    eventsCache = await window.EventDB.getAll();
+    renderEventOptions();
     if (!initialized) {
       presetSelect.value = 'this-month';
       hourlyDateInput.value = toISODate(new Date());

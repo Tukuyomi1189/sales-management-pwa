@@ -53,6 +53,7 @@
 <section class="view view--register" data-view-panel="sales" hidden>
   <div class="register">
     <section class="register__products" aria-label="商品">
+      <p id="register-event-pill" class="event-pill" hidden></p>
       <div class="register__toolbar">
         <div id="register-category-tabs" class="category-tabs" role="toolbar" aria-label="カテゴリで絞り込み"></div>
         <div class="register__search">
@@ -312,7 +313,16 @@
         <input type="date" id="report-to" />
       </div>
     </div>
+    <div id="report-event-detail" class="report-event" hidden>
+      <p id="report-event-text" class="report-event__text"></p>
+      <div class="report-event__actions">
+        <button type="button" id="report-event-edit" class="btn btn--ghost btn--sm">名前・日付を変更</button>
+        <button type="button" id="report-event-delete" class="btn btn--danger btn--sm">このイベントを削除</button>
+      </div>
+    </div>
+    <button type="button" id="report-event-add-past" class="btn btn--ghost btn--sm report-event__add">＋ 過去のイベントを登録</button>
   </section>
+
 
   <section class="panel">
     <div class="stat-tiles" id="report-stat-tiles"></div>
@@ -358,6 +368,15 @@
       <button type="button" id="settlement-selection-clear" class="btn btn--ghost btn--sm">選択を解除</button>
     </div>
   </section>
+
+  <section class="panel" id="reconcile-panel" aria-labelledby="reconcile-heading" hidden>
+    <div class="panel__header">
+      <h2 id="reconcile-heading" class="panel__title">在庫の照合</h2>
+      <button type="button" id="reconcile-csv-button" class="btn btn--ghost btn--sm">CSVで保存</button>
+    </div>
+    <p class="tagline" id="reconcile-note"></p>
+    <div id="reconcile-body" class="table-wrap"></div>
+  </section>
 </section>
 
 <!-- ============ 商品マスタ ============ -->
@@ -367,6 +386,22 @@
     <span id="product-cloud-banner-text"></span>
     <button type="button" id="product-cloud-banner-button" class="btn btn--primary btn--sm" hidden>この端末の商品をクラウドへアップロード</button>
   </div>
+
+  <section class="panel event-panel" id="event-panel" aria-labelledby="event-panel-heading">
+    <div class="event-panel__main">
+      <div class="event-panel__text">
+        <h2 id="event-panel-heading" class="panel__title">イベント</h2>
+        <p id="event-status" class="event-panel__status">開催中のイベントはありません</p>
+      </div>
+      <div class="event-panel__actions">
+        <button type="button" id="event-start-button" class="btn btn--primary">イベントを開始</button>
+        <button type="button" id="event-close-button" class="btn btn--ghost" hidden>イベントを締める</button>
+      </div>
+    </div>
+    <p class="field-hint event-panel__hint">開場前に在庫数を搬入数に合わせてから「イベントを開始」を押すと、その時点の在庫数が「開始時在庫」として記録されます。閉場後は「イベントを締める」。レポートでイベントごとの売上・精算・在庫の照合を見られます。</p>
+    <p id="event-local-note" class="event-panel__note" role="status" hidden></p>
+  </section>
+
 
   <button type="button" id="product-add-button" class="btn btn--primary product-add-button">＋ 商品を追加</button>
   <section class="panel product-form-panel" id="product-form-panel" aria-labelledby="form-heading">
@@ -465,14 +500,6 @@
         </select>
       </label>
       <div class="summary" id="summary-stats" aria-live="polite"></div>
-    </div>
-
-    <div class="start-stock-bar">
-      <div class="start-stock-bar__text">
-        <span class="start-stock-bar__label">開始時の在庫</span>
-        <span id="start-stock-status">未記録</span>
-      </div>
-      <button type="button" id="start-stock-button" class="btn btn--ghost btn--sm">開始時の在庫を記録</button>
     </div>
 
     <div class="toolbar">
@@ -606,6 +633,32 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
+<dialog id="event-dialog" class="event-dialog" aria-labelledby="event-dialog-title">
+  <form id="event-form" method="dialog" class="event-form">
+    <h2 id="event-dialog-title" class="event-form__title">イベントを開始</h2>
+    <div class="field">
+      <label for="event-name">イベント名 <span class="req">必須</span></label>
+      <input type="text" id="event-name" placeholder="例: コミティア150" autocomplete="off" />
+    </div>
+    <div class="event-form__dates">
+      <div class="field">
+        <label for="event-start-date">開始日</label>
+        <input type="date" id="event-start-date" />
+      </div>
+      <div class="field">
+        <label for="event-end-date">終了日</label>
+        <input type="date" id="event-end-date" />
+      </div>
+    </div>
+    <p id="event-form-hint" class="field-hint"></p>
+    <p id="event-form-message" class="form-message" role="status"></p>
+    <div class="event-form__actions">
+      <button type="button" id="event-form-cancel" class="btn btn--ghost">やめる</button>
+      <button type="submit" id="event-form-submit" class="btn btn--primary">開始する</button>
+    </div>
+  </form>
+</dialog>
+
 <script src="js/firebase-init.js"></script>
 <script src="js/db.js"></script>
 <script src="js/router.js"></script>
@@ -616,6 +669,7 @@
 <script src="js/settings.js"></script>
 <script src="js/reports.js"></script>
 <script src="js/settlement.js"></script>
+<script src="js/events.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
