@@ -56,6 +56,7 @@
   let allProducts = [];
   let editingId = null;
   let editingOriginalCode = '';
+  let editingOriginalStock = null; // 在庫数 shown when editing started (see handleSubmit)
 
   const esc = (s) => window.App.escapeHtml(s);
 
@@ -119,6 +120,7 @@
     idField.value = '';
     editingId = null;
     editingOriginalCode = '';
+    editingOriginalStock = null;
     renderStockSourceOptions('');
     formModeLabel.textContent = '商品を登録';
     submitButton.textContent = '登録する';
@@ -136,6 +138,7 @@
     categoryField.value = product.category || '';
     priceField.value = product.price ?? '';
     stockField.value = product.stock ?? '';
+    editingOriginalStock = Number(product.stock) || 0;
     unitField.value = product.unit || '';
     noteField.value = product.note || '';
     payeeField.value = product.payee || '';
@@ -207,7 +210,13 @@
       if (editingId) {
         const editing = allProducts.find((p) => p.id === editingId);
         const dependents = editing ? dependentsOf(editing, editingOriginalCode) : [];
-        await window.ProductDB.update(editingId, values);
+        // Never send 在庫数 as a number: other devices may have sold this product since the
+        // form was opened, and the number typed here would overwrite those sales. Unchanged →
+        // leave stock alone; changed → apply only the difference (atomic increment).
+        const { stock, ...rest } = values;
+        const stockDelta = values.stockSourceCode ? 0 : stock - editingOriginalStock;
+        await window.ProductDB.update(editingId, rest);
+        if (stockDelta) await window.ProductDB.adjustOwnStock(editingId, stockDelta);
         // Code changed: re-point the products that share this product's stock.
         if (values.code !== editingOriginalCode) {
           for (const d of dependents) await window.ProductDB.update(d.id, { stockSourceCode: values.code });
@@ -499,13 +508,45 @@
           ...(item.startStockAt && Number.isFinite(Number(item.startStock))
             ? { startStock: Number(item.startStock), startStockAt: String(item.startStockAt) }
             : {}),
-          createdAt: item.createdAt,
+          ...(item.createdAt ? { createdAt: String(item.createdAt) } : {}),
         }));
 
       if (cleaned.length === 0) throw new Error('インポート可能な商品データが見つかりませんでした。');
 
-      await window.ProductDB.bulkAdd(cleaned);
-      window.App.showToast(`${cleaned.length}件の商品をインポートしました。`);
+      // A product whose 商品コード already exists is overwritten with the file's values
+      // (restoring a backup), instead of being added a second time. Products without a code
+      // can't be matched and are always added.
+      const existing = await window.ProductDB.getAll();
+      const byCode = new Map(existing.filter((p) => codeOf(p)).map((p) => [codeOf(p), p]));
+      const seen = new Set();
+      let toAdd = 0;
+      let toOverwrite = 0;
+      for (const p of cleaned) {
+        const code = String(p.code || '').trim();
+        if (code && (byCode.has(code) || seen.has(code))) toOverwrite++;
+        else toAdd++;
+        if (code) seen.add(code);
+      }
+      if (toOverwrite > 0) {
+        const ok = window.confirm(`商品をインポートします: 追加 ${toAdd}件 / 上書き ${toOverwrite}件\n同じ商品コードの商品は、在庫数も含めてファイルの内容で上書きされます。よろしいですか?`);
+        if (!ok) return;
+      }
+
+      let added = 0;
+      let overwritten = 0;
+      for (const p of cleaned) {
+        const code = String(p.code || '').trim();
+        const match = code ? await window.ProductDB.findByCode(code) : undefined;
+        if (match) {
+          const { createdAt, ...changes } = p;
+          await window.ProductDB.update(match.id, changes);
+          overwritten++;
+        } else {
+          await window.ProductDB.add(p);
+          added++;
+        }
+      }
+      window.App.showToast(`商品をインポートしました: 追加 ${added}件 / 上書き ${overwritten}件`);
       await refreshList();
     } catch (err) {
       console.error(err);

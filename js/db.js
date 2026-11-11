@@ -252,6 +252,13 @@ const SalesDB = {
       totalAmount: calcTotal(safeChanges.items || existing.items),
       updatedAt: new Date().toISOString(),
     };
+    // The amount handed over (お預かり / お釣り) belongs to the original total. If the edit
+    // changes the total it no longer matches, and what was really received is unknown,
+    // so keep only the payment method.
+    if (existing.payment && existing.payment.method && updated.totalAmount !== Number(existing.totalAmount)
+        && (existing.payment.received != null || existing.payment.change != null)) {
+      updated.payment = { method: existing.payment.method };
+    }
     syncInBackground(fs.updateDoc(docRef, updated), '更新');
     await adjustStockLocally(updated.items || existing.items, -1);
     return { ...existing, ...updated, id };
@@ -322,13 +329,17 @@ const SalesDB = {
     for (const s of sales) {
       const { id, ...rest } = s;
       const createdAt = rest.createdAt || now;
-      await fs.addDoc(col, {
+      // A sale that has an id (e.g. from this app's own export) is written under that id,
+      // so importing the same backup twice overwrites it instead of duplicating it.
+      const docRef = id ? fs.doc(col, String(id)) : fs.doc(col);
+      // Like every other write here, don't wait for the server (that never ends offline).
+      syncInBackground(fs.setDoc(docRef, {
         ...rest,
         date: rest.date || localDateString(new Date(createdAt)),
         totalAmount: calcTotal(rest.items || []),
         createdAt,
         updatedAt: rest.updatedAt || createdAt,
-      });
+      }), 'インポート');
     }
   },
 };
@@ -546,6 +557,27 @@ const ProductDB = (() => {
     async clear() {
       await start();
       for (const id of [...products.keys()]) await api.remove(id);
+    },
+
+    /**
+     * Move THIS product's own stock by `delta` (not redirected to a shared-stock source).
+     * Used when the 在庫数 field is changed in the product form: sending the difference with
+     * `increment` instead of the typed number keeps sales made on other devices while the
+     * form was open (sending the number would overwrite them).
+     */
+    async adjustOwnStock(productId, delta) {
+      await start();
+      const product = products.get(sid(productId));
+      if (!product || !Number.isFinite(delta) || delta === 0) return;
+      if (mode === 'local') {
+        await LocalProductDB.update(Number(product.id), { stock: (Number(product.stock) || 0) + delta });
+        await loadLocal();
+        notify();
+        return;
+      }
+      products.set(product.id, { ...product, stock: (Number(product.stock) || 0) + delta });
+      await cloudWrite('在庫の更新', (fs, col) => fs.updateDoc(fs.doc(col, product.id), { stock: fs.increment(delta) }));
+      notify();
     },
 
     /** Move stock by `delta` on the product that owns this product's stock (see getStockOwner). */
